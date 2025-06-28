@@ -1,37 +1,242 @@
+// Back-end/routes/services.js - Updated to work with Categories
 const express = require('express');
 const router = express.Router();
 const Service = require('../Models/Service');
-const authenticateToken = require('../Middleware/authMiddleware');
+const Category = require('../Models/Category');
+const authenticateToken = require('../middleware/authMiddleware');
 
-// جلب جميع الخدمات
+// جلب جميع الخدمات أو تصفية حسب القسم (مفتوح للجميع)
 router.get('/', async (req, res) => {
   try {
-    const services = await Service.find();
+    console.log('GET /api/services - Query params:', req.query);
+    
+    const { categoryId, category, populate } = req.query;
+    let query = { isActive: true };
+    
+    // تصفية حسب القسم إذا تم تمرير categoryId
+    if (categoryId) {
+      query.categoryId = categoryId;
+      console.log('Filtering by categoryId:', categoryId);
+    }
+    
+    // تصفية حسب اسم القسم إذا تم تمرير category
+    if (category) {
+      const foundCategory = await Category.findOne({ 
+        $or: [{ name: category }, { slug: category }] 
+      });
+      if (foundCategory) {
+        query.categoryId = foundCategory._id;
+        console.log('Filtering by category name:', category, '-> ID:', foundCategory._id);
+      }
+    }
+    
+    let servicesQuery = Service.find(query).sort({ createdAt: -1 });
+    
+    // populate معلومات القسم إذا طُلب ذلك
+    if (populate === 'category') {
+      servicesQuery = servicesQuery.populate('categoryId', 'name description icon slug');
+    }
+    
+    const services = await servicesQuery;
+    console.log(`Found ${services.length} services`);
+    
     res.json(services);
-  } catch (err) {
-    console.error('خطأ في جلب الخدمات:', err);
-    res.status(500).json({ message: 'حدث خطأ أثناء جلب البيانات' });
+  } catch (error) {
+    console.error('Error fetching services:', error);
+    res.status(500).json({ error: error.message });
   }
 });
 
-// إضافة خدمة جديدة (يتطلب صلاحية)
-router.post('/', authenticateToken, async (req, res) => {
-  const { title, description } = req.body;
-
-  if (
-    typeof title !== 'string' || !title.trim() ||
-    typeof description !== 'string' || !description.trim()
-  ) {
-    return res.status(400).json({ message: 'العنوان والوصف مطلوبان ويجب أن يكونا نصاً.' });
-  }
-
+// جلب خدمة واحدة (مفتوح للجميع)
+router.get('/:id', async (req, res) => {
   try {
-    const newService = new Service({ title: title.trim(), description: description.trim() });
-    const savedService = await newService.save();
+    console.log(`GET /api/services/${req.params.id}`);
+    
+    const service = await Service.findById(req.params.id).populate('categoryId', 'name description icon slug');
+    
+    if (!service) {
+      return res.status(404).json({ error: 'الخدمة غير موجودة' });
+    }
+    
+    console.log('Service found:', service.name);
+    res.json(service);
+  } catch (error) {
+    console.error('Error fetching service:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// إضافة خدمة جديدة (محمي - للإدارة فقط)
+router.post('/', authenticateToken, async (req, res) => {
+  try {
+    console.log('POST /api/services - Request body:', req.body);
+    
+    const { name, description, categoryId, price, duration } = req.body;
+    
+    // التحقق من البيانات المطلوبة
+    if (!name || !description || !categoryId) {
+      return res.status(400).json({ 
+        error: 'اسم الخدمة ووصفها والقسم مطلوبة' 
+      });
+    }
+    
+    // التحقق من وجود القسم
+    const category = await Category.findById(categoryId);
+    if (!category) {
+      return res.status(400).json({ error: 'القسم المحدد غير موجود' });
+    }
+    
+    // التحقق من عدم وجود خدمة بنفس الاسم في نفس القسم
+    const existingService = await Service.findOne({ 
+      name,
+      categoryId,
+      isActive: true
+    });
+    
+    if (existingService) {
+      return res.status(400).json({ 
+        error: 'يوجد خدمة بهذا الاسم في نفس القسم مسبقاً' 
+      });
+    }
+
+    const service = new Service({
+      name,
+      description,
+      categoryId,
+      price: price ? parseFloat(price) : undefined,
+      duration
+    });
+
+    console.log('Creating service:', service);
+    await service.save();
+    
+    // جلب الخدمة مع معلومات القسم
+    const savedService = await Service.findById(service._id).populate('categoryId', 'name description icon slug');
+    
+    console.log('Service created successfully:', savedService.name);
     res.status(201).json(savedService);
-  } catch (err) {
-    console.error('خطأ في حفظ الخدمة:', err);
-    res.status(400).json({ message: 'تعذر حفظ الخدمة', error: err.message });
+  } catch (error) {
+    console.error('Error creating service:', error);
+    if (error.code === 11000) {
+      return res.status(400).json({ error: 'اسم الخدمة موجود مسبقاً في هذا القسم' });
+    }
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// تحديث خدمة (محمي - للإدارة فقط)
+router.put('/:id', authenticateToken, async (req, res) => {
+  try {
+    console.log(`PUT /api/services/${req.params.id} - Request body:`, req.body);
+    
+    const { name, description, categoryId, price, duration } = req.body;
+    
+    // إذا تم تغيير القسم، تحقق من وجوده
+    if (categoryId) {
+      const category = await Category.findById(categoryId);
+      if (!category) {
+        return res.status(400).json({ error: 'القسم المحدد غير موجود' });
+      }
+    }
+    
+    const updateData = {
+      name,
+      description,
+      categoryId,
+      price: price ? parseFloat(price) : undefined,
+      duration
+    };
+    
+    // إزالة القيم undefined
+    Object.keys(updateData).forEach(key => {
+      if (updateData[key] === undefined) {
+        delete updateData[key];
+      }
+    });
+    
+    const service = await Service.findByIdAndUpdate(
+      req.params.id,
+      updateData,
+      { new: true, runValidators: true }
+    ).populate('categoryId', 'name description icon slug');
+
+    if (!service) {
+      return res.status(404).json({ error: 'الخدمة غير موجودة' });
+    }
+
+    console.log('Service updated successfully:', service.name);
+    res.json(service);
+  } catch (error) {
+    console.error('Error updating service:', error);
+    if (error.code === 11000) {
+      return res.status(400).json({ error: 'اسم الخدمة موجود مسبقاً في هذا القسم' });
+    }
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// حذف خدمة (محمي - للإدارة فقط)
+router.delete('/:id', authenticateToken, async (req, res) => {
+  try {
+    console.log(`DELETE /api/services/${req.params.id}`);
+    
+    const service = await Service.findByIdAndDelete(req.params.id);
+    
+    if (!service) {
+      return res.status(404).json({ error: 'الخدمة غير موجودة' });
+    }
+
+    console.log('Service deleted successfully:', service.name);
+    res.json({ message: 'تم حذف الخدمة بنجاح' });
+  } catch (error) {
+    console.error('Error deleting service:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// إحصائيات الخدمات حسب القسم (مفتوح للجميع)
+router.get('/stats/by-category', async (req, res) => {
+  try {
+    console.log('GET /api/services/stats/by-category');
+    
+    const stats = await Service.aggregate([
+      { $match: { isActive: true } },
+      { 
+        $group: {
+          _id: '$categoryId',
+          count: { $sum: 1 },
+          services: { $push: { name: '$name', _id: '$_id' } }
+        }
+      },
+      {
+        $lookup: {
+          from: 'categories',
+          localField: '_id',
+          foreignField: '_id',
+          as: 'category'
+        }
+      },
+      {
+        $unwind: '$category'
+      },
+      {
+        $project: {
+          categoryId: '$_id',
+          categoryName: '$category.name',
+          categoryIcon: '$category.icon',
+          categorySlug: '$category.slug',
+          servicesCount: '$count',
+          services: '$services'
+        }
+      },
+      { $sort: { servicesCount: -1 } }
+    ]);
+    
+    console.log('Services stats by category:', stats.length);
+    res.json(stats);
+  } catch (error) {
+    console.error('Error getting services stats:', error);
+    res.status(500).json({ error: error.message });
   }
 });
 
