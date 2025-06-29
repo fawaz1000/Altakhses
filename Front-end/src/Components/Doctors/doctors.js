@@ -2,9 +2,6 @@ import React, { useRef, useEffect, useState } from 'react';
 import { Swiper, SwiperSlide } from 'swiper/react';
 import { Navigation, Pagination, Autoplay } from 'swiper/modules';
 import { FaChevronRight, FaChevronLeft, FaUserMd, FaStethoscope, FaGraduationCap, FaHeart } from 'react-icons/fa';
-// ملاحظة: استخدم import { Link } from 'react-router-dom'; في مشروعك الفعلي
-// هنا نستخدم a tag للعرض التوضيحي
-import { doctors } from '../../Data/doctor';
 
 import 'swiper/css';
 import 'swiper/css/navigation';
@@ -14,6 +11,58 @@ export default function Doctors() {
   const [slidesPerView, setSlidesPerView] = useState(3);
   const [isVisible, setIsVisible] = useState(false);
   const swiperRef = useRef(null);
+
+  // بيانات الأطباء داخل الكومبوننت
+  const doctors = [
+    {
+      id: 1,
+      name: "د. أحمد محمد السعيد",
+      specialty: "أخصائي القلب والأوعية الدموية",
+      bio: "خبرة أكثر من 15 عاماً في جراحة القلب والقسطرة العلاجية",
+      img: "/images/doctor1.jpg",
+      link: null
+    },
+    {
+      id: 2,
+      name: "د. فاطمة علي الزهراني",
+      specialty: "أخصائية الأطفال والرضع",
+      bio: "متخصصة في طب الأطفال حديثي الولادة والعناية المركزة",
+      img: "/images/doctor2.jpg",
+      link: null
+    },
+    {
+      id: 3,
+      name: "د. محمد عبدالرحمن القحطاني",
+      specialty: "أخصائي جراحة العظام",
+      bio: "خبير في جراحة المفاصل الاصطناعية وإصابات الملاعب",
+      img: "/images/doctor3.jpg",
+      link: null
+    },
+    {
+      id: 4,
+      name: "د. نورا سالم العتيبي",
+      specialty: "أخصائية الأمراض الجلدية",
+      bio: "متخصصة في علاج الأمراض الجلدية والتجميل الطبي",
+      img: "/images/doctor4.jpg",
+      link: null
+    },
+    {
+      id: 5,
+      name: "د. خالد يوسف الغامدي",
+      specialty: "أخصائي المسالك البولية",
+      bio: "خبرة واسعة في جراحة المسالك البولية والمناظير",
+      img: "/images/doctor5.jpg",
+      link: null
+    },
+    {
+      id: 6,
+      name: "د. سارة أحمد الدوسري",
+      specialty: "أخصائية النساء والولادة",
+      bio: "متخصصة في الحمل عالي الخطورة والجراحات النسائية",
+      img: "/images/doctor6.jpg",
+      link: null
+    }
+  ];
 
   useEffect(() => {
     const update = () => {

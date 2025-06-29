@@ -1,4 +1,4 @@
-// src/App.jsx
+// src/App.jsx - Clean version without missing imports
 import React from 'react';
 import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
 
@@ -10,17 +10,13 @@ import Services from './Components/Services/services';
 import Doctors from './Components/Doctors/doctors';
 import MediaChannel from './Components/MediaChannel/media';
 import PartnersSlider from './Components/PartnersSlider/PartnersSlider';
-import DentistServices from './Pages/Dentist/services';
-import DentistDoctors  from './Pages/Dentist/doctors';
-import InternistServices from './Pages/Internist/services';
-import InternistDoctors  from './Pages/Internist/doctor';
-import GeneralServices   from './Pages/General/services';
-import GeneralDoctor     from './Pages/General/doctor';
-import EntServices       from './Pages/ENT/services';
-import EntDoctor         from './Pages/ENT/doctor';
 
-import AdminLogin    from './Pages/AdminLogin';
-import Dashboard     from './Pages/Dashboard';
+// صفحة عامة للخدمات
+import ServicesByCategory from './Components/Services/ServicesByCategory';
+
+// صفحات الإدارة
+import AdminLogin from './Pages/AdminLogin';
+import Dashboard from './Pages/Dashboard';
 import ProtectedRoute from './Components/ProtectedRoute/ProtectedRoute';
 
 const MainLayout = () => (
@@ -43,31 +39,49 @@ export default function App() {
         {!isAdminPage && <Navbar />}
         <main className="flex-grow">
           <Routes>
+            {/* الصفحة الرئيسية */}
             <Route path="/" element={<MainLayout />} />
-            <Route path="/dentist"        element={<DentistServices />} />
-            <Route path="/dentistdoctors" element={<DentistDoctors />} />
-            <Route path="/internist"      element={<InternistServices />} />
-            <Route path="/internistdoctors" element={<InternistDoctors />} />
-            <Route path="/general"          element={<GeneralServices />} />
-            <Route path="/generaldoctor"    element={<GeneralDoctor />} />
-            <Route path="/ent"              element={<EntServices />} />
-            <Route path="/entdoctor"        element={<EntDoctor />} />
+            
+            {/* صفحة عامة للخدمات حسب القسم */}
+            <Route path="/services/:categorySlug" element={<ServicesByCategory />} />
+            
+            {/* صفحة جميع الأقسام */}
+            <Route path="/services" element={<Services />} />
 
-            {/* إدارة */}
-            <Route path="/admin/login"   element={<AdminLogin />} />
-            <Route path="/admin/dashboard"
-                   element={
-                     <ProtectedRoute>
-                       <Dashboard />
-                     </ProtectedRoute>
-                   }
+            {/* صفحات الإدارة */}
+            <Route path="/admin/login" element={<AdminLogin />} />
+            <Route 
+              path="/admin/dashboard" 
+              element={
+                <ProtectedRoute>
+                  <Dashboard />
+                </ProtectedRoute>
+              } 
             />
 
-            {/* 404 */}
+            {/* صفحة 404 */}
             <Route path="*" element={
-              <h1 className="text-center text-xl mt-32 text-red-500 font-bold">
-                الصفحة غير موجودة
-              </h1>
+              <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-gray-50 to-gray-100">
+                <div className="text-center max-w-md mx-auto px-6">
+                  <div className="text-8xl mb-8">😔</div>
+                  <h1 className="text-4xl font-bold text-gray-800 mb-4">الصفحة غير موجودة</h1>
+                  <p className="text-gray-600 mb-8">عذراً، الصفحة التي تبحث عنها غير متوفرة</p>
+                  <div className="flex flex-col sm:flex-row gap-4 justify-center">
+                    <a
+                      href="/"
+                      className="bg-[#0d5047] text-white px-6 py-3 rounded-lg hover:bg-[#28a49c] transition-colors duration-300"
+                    >
+                      العودة للرئيسية
+                    </a>
+                    <a
+                      href="/services"
+                      className="bg-gray-600 text-white px-6 py-3 rounded-lg hover:bg-gray-700 transition-colors duration-300"
+                    >
+                      تصفح الخدمات
+                    </a>
+                  </div>
+                </div>
+              </div>
             }/>
           </Routes>
         </main>

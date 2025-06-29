@@ -1,3 +1,4 @@
+// Front-end/src/Pages/Dashboard.js - الجزء المصحح
 import React, { useEffect, useState, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { jwtDecode } from 'jwt-decode';
@@ -15,6 +16,8 @@ import {
   FaExclamationCircle,
   FaStethoscope,
   FaList,
+  FaSignOutAlt,
+  FaUser,
 } from 'react-icons/fa';
 import { API_BASE } from '../config';
 
@@ -25,11 +28,12 @@ export default function Dashboard() {
   const [mediaItems, setMediaItems] = useState([]);
   const [reportMetrics, setReportMetrics] = useState([]);
   const [services, setServices] = useState([]);
-  const [categories, setCategories] = useState([]); // إضافة state للأقسام
+  const [categories, setCategories] = useState([]);
   const [availableYears, setAvailableYears] = useState([]);
   const [selectedYear, setSelectedYear] = useState(new Date().getFullYear());
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [message, setMessage] = useState({ type: '', text: '' });
+  const [userInfo, setUserInfo] = useState(null);
   
   const [newMedia, setNewMedia] = useState({
     title: '',
@@ -95,54 +99,116 @@ export default function Dashboard() {
     setTimeout(() => setMessage({ type: '', text: '' }), 5000);
   };
 
-  useEffect(() => {
+  // دالة للحصول على التوكن مع التحقق
+  const getAuthToken = () => {
     const token = localStorage.getItem('token');
-    if (!token) return navigate('/admin/login');
-    try {
-      const { exp, role } = jwtDecode(token);
-      if (exp * 1000 < Date.now() || role !== 'admin') {
+    if (!token) {
+      console.log('❌ No token found');
+      navigate('/admin/login');
+      return null;
+    }
+    return token;
+  };
+
+  // دالة للحصول على headers المطلوبة
+  const getAuthHeaders = () => {
+    const token = getAuthToken();
+    if (!token) return null;
+    
+    return {
+      'Authorization': `Bearer ${token}`,
+      'Content-Type': 'application/json'
+    };
+  };
+
+  // التحقق من المصادقة عند تحميل المكون
+  useEffect(() => {
+    const verifyAuth = async () => {
+      const token = localStorage.getItem('token');
+      if (!token) {
+        console.log('❌ No token found, redirecting to login');
+        navigate('/admin/login');
+        return;
+      }
+
+      try {
+        // التحقق من صحة التوكن
+        const { exp, role, username } = jwtDecode(token);
+        
+        if (exp * 1000 < Date.now()) {
+          console.log('❌ Token expired');
+          localStorage.removeItem('token');
+          navigate('/admin/login');
+          return;
+        }
+
+        if (role !== 'admin') {
+          console.log('❌ User is not admin');
+          localStorage.removeItem('token');
+          navigate('/admin/login');
+          return;
+        }
+
+        // التحقق من صحة التوكن مع الخادم
+        const response = await axios.get(`${API_BASE}/api/admin/verify`, {
+          headers: { Authorization: `Bearer ${token}` },
+          withCredentials: true,
+          timeout: 5000
+        });
+
+        if (response.data.valid) {
+          setUserInfo({ username, role });
+          console.log('✅ Authentication verified for:', username);
+        } else {
+          throw new Error('Invalid token response');
+        }
+
+      } catch (error) {
+        console.error('❌ Auth verification failed:', error);
         localStorage.removeItem('token');
         navigate('/admin/login');
       }
-    } catch {
-      localStorage.removeItem('token');
-      navigate('/admin/login');
-    }
+    };
+
+    verifyAuth();
   }, [navigate]);
 
   // جلب جميع السنوات المتاحة
   const fetchAvailableYears = useCallback(async () => {
-    const token = localStorage.getItem('token');
-    if (!token) return;
+    const headers = getAuthHeaders();
+    if (!headers) return;
 
     try {
       const { data } = await axios.get(`${API_BASE}/api/reports/all`, {
-        headers: { Authorization: `Bearer ${token}` },
+        headers,
         withCredentials: true,
+        timeout: 10000
       });
       
       if (Array.isArray(data)) {
         const years = data.map(report => report.year).sort((a, b) => b - a);
         setAvailableYears(years);
+        console.log('✅ Available years loaded:', years);
       }
     } catch (error) {
-      console.error('خطأ في جلب السنوات:', error);
+      console.error('❌ Error fetching years:', error);
       setAvailableYears([]);
+      if (error.response?.status === 401) {
+        localStorage.removeItem('token');
+        navigate('/admin/login');
+      }
     }
-  }, []);
+  }, [navigate]);
 
   // جلب الأقسام
   const fetchCategories = useCallback(async () => {
-    const token = localStorage.getItem('token');
-    if (!token) return;
+    const headers = getAuthHeaders();
+    if (!headers) return;
 
     try {
       console.log('🔍 Fetching categories...');
       const { data } = await axios.get(`${API_BASE}/api/categories`, {
-        headers: { 
-          Authorization: `Bearer ${token}`,
-          'Content-Type': 'application/json'
-        },
+        headers,
         withCredentials: true,
         timeout: 10000
       });
@@ -158,29 +224,34 @@ export default function Dashboard() {
       }
     } catch (error) {
       console.error('❌ Error fetching categories:', error);
-      if (error.response) {
-        console.error('Response status:', error.response.status);
-        console.error('Response data:', error.response.data);
-      }
       setCategories([]);
-      showMessage('error', `خطأ في جلب الأقسام: ${error.message}`);
+      
+      if (error.response?.status === 401) {
+        localStorage.removeItem('token');
+        navigate('/admin/login');
+      } else {
+        showMessage('error', `خطأ في جلب الأقسام: ${error.message}`);
+      }
     }
-  }, []);
+  }, [navigate]);
 
   const fetchCurrentCategory = useCallback(async () => {
+    if (!userInfo) return; // انتظار التحقق من المصادقة
+    
     setLoading(true);
-    const token = localStorage.getItem('token');
-    if (!token) return;
-
-    const headers = { Authorization: `Bearer ${token}` };
+    const headers = getAuthHeaders();
+    if (!headers) return;
 
     try {
+      console.log(`🔄 Fetching data for category: ${category}`);
+      
       if (category === 'reports') {
         // جلب بيانات السنة المحددة
         const { data } = await axios.get(`${API_BASE}/api/reports`, {
           headers,
           withCredentials: true,
           params: { year: selectedYear },
+          timeout: 10000
         });
         
         setReportMetrics(data[0]?.metrics || []);
@@ -195,6 +266,7 @@ export default function Dashboard() {
         const { data } = await axios.get(`${API_BASE}/api/services`, {
           headers,
           withCredentials: true,
+          timeout: 10000
         });
         setServices(data || []);
         setMediaItems([]);
@@ -207,31 +279,59 @@ export default function Dashboard() {
         setReportMetrics([]);
         setServices([]);
       } else {
+        // جلب الوسائط
         const { data } = await axios.get(`${API_BASE}/api/media`, {
           headers,
           withCredentials: true,
           params: { category },
+          timeout: 10000
         });
         setMediaItems(data || []);
         setReportMetrics([]);
         setServices([]);
         setCategories([]);
       }
+      
+      console.log(`✅ Data loaded for category: ${category}`);
     } catch (error) {
-      console.error('خطأ في جلب البيانات:', error);
+      console.error('❌ Error fetching data:', error);
       setMediaItems([]);
       setReportMetrics([]);
       setServices([]);
       setCategories([]);
-      showMessage('error', 'حدث خطأ في جلب البيانات');
+      
+      if (error.response?.status === 401) {
+        localStorage.removeItem('token');
+        navigate('/admin/login');
+      } else {
+        showMessage('error', 'حدث خطأ في جلب البيانات');
+      }
     } finally {
       setLoading(false);
     }
-  }, [category, selectedYear, fetchAvailableYears, fetchCategories]);
+  }, [category, selectedYear, fetchAvailableYears, fetchCategories, userInfo, navigate]);
 
   useEffect(() => {
     fetchCurrentCategory();
   }, [fetchCurrentCategory]);
+
+  // دالة تسجيل الخروج
+  const handleLogout = async () => {
+    try {
+      const headers = getAuthHeaders();
+      if (headers) {
+        await axios.post(`${API_BASE}/api/admin/logout`, {}, {
+          headers,
+          withCredentials: true
+        });
+      }
+    } catch (error) {
+      console.error('❌ Logout error:', error);
+    } finally {
+      localStorage.removeItem('token');
+      navigate('/admin/login');
+    }
+  };
 
   // إضافة قسم جديد
   const handleAddCategory = async (e) => {
@@ -244,7 +344,8 @@ export default function Dashboard() {
     }
 
     setIsSubmitting(true);
-    const token = localStorage.getItem('token');
+    const headers = getAuthHeaders();
+    if (!headers) return;
 
     try {
       console.log('Adding category:', newCategory);
@@ -252,11 +353,9 @@ export default function Dashboard() {
         `${API_BASE}/api/categories`,
         newCategory,
         {
-          headers: {
-            'Content-Type': 'application/json',
-            Authorization: `Bearer ${token}`,
-          },
+          headers,
           withCredentials: true,
+          timeout: 10000
         }
       );
       
@@ -266,8 +365,14 @@ export default function Dashboard() {
       showMessage('success', 'تم إضافة القسم بنجاح');
     } catch (error) {
       console.error('خطأ في إضافة القسم:', error);
-      const errorMessage = error.response?.data?.error || error.message || 'فشل في إضافة القسم';
-      showMessage('error', errorMessage);
+      
+      if (error.response?.status === 401) {
+        localStorage.removeItem('token');
+        navigate('/admin/login');
+      } else {
+        const errorMessage = error.response?.data?.error || error.message || 'فشل في إضافة القسم';
+        showMessage('error', errorMessage);
+      }
     } finally {
       setIsSubmitting(false);
     }
@@ -289,18 +394,18 @@ export default function Dashboard() {
       return;
     }
 
-    const token = localStorage.getItem('token');
+    const headers = getAuthHeaders();
+    if (!headers) return;
+
     try {
       console.log('Updating category:', id, updatedCategory);
       const { data } = await axios.put(
         `${API_BASE}/api/categories/${id}`,
         updatedCategory,
         {
-          headers: { 
-            Authorization: `Bearer ${token}`,
-            'Content-Type': 'application/json'
-          },
+          headers,
           withCredentials: true,
+          timeout: 10000
         }
       );
       
@@ -310,8 +415,14 @@ export default function Dashboard() {
       showMessage('success', 'تم تحديث القسم بنجاح');
     } catch (error) {
       console.error('خطأ في تحديث القسم:', error);
-      const errorMessage = error.response?.data?.error || error.message || 'فشل في تحديث القسم';
-      showMessage('error', errorMessage);
+      
+      if (error.response?.status === 401) {
+        localStorage.removeItem('token');
+        navigate('/admin/login');
+      } else {
+        const errorMessage = error.response?.data?.error || error.message || 'فشل في تحديث القسم';
+        showMessage('error', errorMessage);
+      }
     }
   };
 
@@ -319,12 +430,15 @@ export default function Dashboard() {
   const handleDeleteCategory = async (id) => {
     if (!window.confirm('هل أنت متأكد من حذف هذا القسم؟ سيتم حذف جميع الخدمات المرتبطة به أيضاً.')) return;
     
-    const token = localStorage.getItem('token');
+    const headers = getAuthHeaders();
+    if (!headers) return;
+
     try {
       console.log('Deleting category:', id);
       await axios.delete(`${API_BASE}/api/categories/${id}`, {
-        headers: { Authorization: `Bearer ${token}` },
+        headers,
         withCredentials: true,
+        timeout: 10000
       });
       
       console.log('Category deleted successfully');
@@ -332,22 +446,35 @@ export default function Dashboard() {
       showMessage('success', 'تم حذف القسم بنجاح');
     } catch (error) {
       console.error('خطأ في حذف القسم:', error);
-      const errorMessage = error.response?.data?.error || error.message || 'فشل في حذف القسم';
-      showMessage('error', errorMessage);
+      
+      if (error.response?.status === 401) {
+        localStorage.removeItem('token');
+        navigate('/admin/login');
+      } else {
+        const errorMessage = error.response?.data?.error || error.message || 'فشل في حذف القسم';
+        showMessage('error', errorMessage);
+      }
     }
   };
 
-  // باقي الدوال الموجودة (handleAdd, handleEdit, handleUpdate, handleDelete, etc.)
+  // باقي الدوال (handleAdd, handleEdit, handleUpdate, handleDelete, etc.)
   const handleAdd = async (e) => {
     e.preventDefault();
     if (isSubmitting) return;
 
+    if (!newMedia.file || !newMedia.title.trim()) {
+      showMessage('error', 'يرجى ملء جميع الحقول واختيار ملف');
+      return;
+    }
+
     setIsSubmitting(true);
-    const token = localStorage.getItem('token');
+    const token = getAuthToken();
+    if (!token) return;
+
     const form = new FormData();
     form.append('media', newMedia.file);
-    form.append('title', newMedia.title);
-    form.append('description', newMedia.description);
+    form.append('title', newMedia.title.trim());
+    form.append('description', newMedia.description.trim());
     form.append('category', category);
 
     try {
@@ -357,6 +484,7 @@ export default function Dashboard() {
           'Content-Type': 'multipart/form-data'
         },
         withCredentials: true,
+        timeout: 30000 // وقت أطول للرفع
       });
       
       setMediaItems([data, ...mediaItems]);
@@ -364,7 +492,13 @@ export default function Dashboard() {
       showMessage('success', 'تم إضافة الملف بنجاح');
     } catch (error) {
       console.error('خطأ في إضافة الملف:', error);
-      showMessage('error', 'فشل في إضافة الملف');
+      
+      if (error.response?.status === 401) {
+        localStorage.removeItem('token');
+        navigate('/admin/login');
+      } else {
+        showMessage('error', 'فشل في إضافة الملف');
+      }
     } finally {
       setIsSubmitting(false);
     }
@@ -376,14 +510,17 @@ export default function Dashboard() {
   };
 
   const handleUpdate = async (id) => {
-    const token = localStorage.getItem('token');
+    const headers = getAuthHeaders();
+    if (!headers) return;
+
     try {
       const { data } = await axios.put(
         `${API_BASE}/api/media/${id}`,
         updatedMedia,
         {
-          headers: { Authorization: `Bearer ${token}` },
+          headers,
           withCredentials: true,
+          timeout: 10000
         }
       );
       setMediaItems(mediaItems.map((i) => (i._id === id ? data : i)));
@@ -391,22 +528,39 @@ export default function Dashboard() {
       showMessage('success', 'تم تحديث الملف بنجاح');
     } catch (error) {
       console.error('خطأ في تحديث الملف:', error);
-      showMessage('error', 'فشل في تحديث الملف');
+      
+      if (error.response?.status === 401) {
+        localStorage.removeItem('token');
+        navigate('/admin/login');
+      } else {
+        showMessage('error', 'فشل في تحديث الملف');
+      }
     }
   };
 
   const handleDelete = async (id) => {
-    const token = localStorage.getItem('token');
+    if (!window.confirm('هل أنت متأكد من حذف هذا الملف؟')) return;
+    
+    const headers = getAuthHeaders();
+    if (!headers) return;
+
     try {
       await axios.delete(`${API_BASE}/api/media/${id}`, {
-        headers: { Authorization: `Bearer ${token}` },
+        headers,
         withCredentials: true,
+        timeout: 10000
       });
       setMediaItems(mediaItems.filter((i) => i._id !== id));
       showMessage('success', 'تم حذف الملف بنجاح');
     } catch (error) {
       console.error('خطأ في حذف الملف:', error);
-      showMessage('error', 'فشل في حذف الملف');
+      
+      if (error.response?.status === 401) {
+        localStorage.removeItem('token');
+        navigate('/admin/login');
+      } else {
+        showMessage('error', 'فشل في حذف الملف');
+      }
     }
   };
 
@@ -421,18 +575,17 @@ export default function Dashboard() {
     }
 
     setIsSubmitting(true);
-    const token = localStorage.getItem('token');
+    const headers = getAuthHeaders();
+    if (!headers) return;
 
     try {
       const { data } = await axios.post(
         `${API_BASE}/api/services`,
         newService,
         {
-          headers: {
-            'Content-Type': 'application/json',
-            Authorization: `Bearer ${token}`,
-          },
+          headers,
           withCredentials: true,
+          timeout: 10000
         }
       );
       
@@ -441,7 +594,13 @@ export default function Dashboard() {
       showMessage('success', 'تم إضافة الخدمة بنجاح');
     } catch (error) {
       console.error('خطأ في إضافة الخدمة:', error);
-      showMessage('error', 'فشل في إضافة الخدمة');
+      
+      if (error.response?.status === 401) {
+        localStorage.removeItem('token');
+        navigate('/admin/login');
+      } else {
+        showMessage('error', 'فشل في إضافة الخدمة');
+      }
     } finally {
       setIsSubmitting(false);
     }
@@ -454,14 +613,17 @@ export default function Dashboard() {
   };
 
   const handleUpdateService = async (id) => {
-    const token = localStorage.getItem('token');
+    const headers = getAuthHeaders();
+    if (!headers) return;
+
     try {
       const { data } = await axios.put(
         `${API_BASE}/api/services/${id}`,
         updatedService,
         {
-          headers: { Authorization: `Bearer ${token}` },
+          headers,
           withCredentials: true,
+          timeout: 10000
         }
       );
       setServices(services.map((s) => (s._id === id ? data : s)));
@@ -469,7 +631,13 @@ export default function Dashboard() {
       showMessage('success', 'تم تحديث الخدمة بنجاح');
     } catch (error) {
       console.error('خطأ في تحديث الخدمة:', error);
-      showMessage('error', 'فشل في تحديث الخدمة');
+      
+      if (error.response?.status === 401) {
+        localStorage.removeItem('token');
+        navigate('/admin/login');
+      } else {
+        showMessage('error', 'فشل في تحديث الخدمة');
+      }
     }
   };
 
@@ -477,17 +645,26 @@ export default function Dashboard() {
   const handleDeleteService = async (id) => {
     if (!window.confirm('هل أنت متأكد من حذف هذه الخدمة؟')) return;
     
-    const token = localStorage.getItem('token');
+    const headers = getAuthHeaders();
+    if (!headers) return;
+
     try {
       await axios.delete(`${API_BASE}/api/services/${id}`, {
-        headers: { Authorization: `Bearer ${token}` },
+        headers,
         withCredentials: true,
+        timeout: 10000
       });
       setServices(services.filter((s) => s._id !== id));
       showMessage('success', 'تم حذف الخدمة بنجاح');
     } catch (error) {
       console.error('خطأ في حذف الخدمة:', error);
-      showMessage('error', 'فشل في حذف الخدمة');
+      
+      if (error.response?.status === 401) {
+        localStorage.removeItem('token');
+        navigate('/admin/login');
+      } else {
+        showMessage('error', 'فشل في حذف الخدمة');
+      }
     }
   };
 
@@ -510,7 +687,8 @@ export default function Dashboard() {
     }
 
     setIsSubmitting(true);
-    const token = localStorage.getItem('token');
+    const headers = getAuthHeaders();
+    if (!headers) return;
     
     const metrics = [
       { label: 'سنوات خبرة', count: parseInt(newMetric.exp), suffix: '+' },
@@ -526,11 +704,9 @@ export default function Dashboard() {
         `${API_BASE}/api/reports`,
         { year: parseInt(newMetric.year), metrics },
         {
-          headers: {
-            'Content-Type': 'application/json',
-            Authorization: `Bearer ${token}`,
-          },
+          headers,
           withCredentials: true,
+          timeout: 10000
         }
       );
       
@@ -554,8 +730,14 @@ export default function Dashboard() {
       showMessage('success', `تم حفظ تقرير سنة ${parseInt(newMetric.year)} بنجاح`);
     } catch (error) {
       console.error('خطأ في حفظ التقرير:', error);
-      const errorMessage = error.response?.data?.message || 'فشل في حفظ التقرير';
-      showMessage('error', errorMessage);
+      
+      if (error.response?.status === 401) {
+        localStorage.removeItem('token');
+        navigate('/admin/login');
+      } else {
+        const errorMessage = error.response?.data?.message || 'فشل في حفظ التقرير';
+        showMessage('error', errorMessage);
+      }
     } finally {
       setIsSubmitting(false);
     }
@@ -570,11 +752,14 @@ export default function Dashboard() {
   const handleDeleteYear = async (year) => {
     if (!window.confirm(`هل أنت متأكد من حذف تقرير سنة ${year}؟`)) return;
     
-    const token = localStorage.getItem('token');
+    const headers = getAuthHeaders();
+    if (!headers) return;
+
     try {
       await axios.delete(`${API_BASE}/api/reports/${year}`, {
-        headers: { Authorization: `Bearer ${token}` },
+        headers,
         withCredentials: true,
+        timeout: 10000
       });
       
       // إعادة تحميل البيانات
@@ -589,13 +774,19 @@ export default function Dashboard() {
       showMessage('success', `تم حذف تقرير سنة ${year} بنجاح`);
     } catch (error) {
       console.error('خطأ في حذف التقرير:', error);
-      showMessage('error', 'فشل في حذف التقرير');
+      
+      if (error.response?.status === 401) {
+        localStorage.removeItem('token');
+        navigate('/admin/login');
+      } else {
+        showMessage('error', 'فشل في حذف التقرير');
+      }
     }
   };
 
-  if (loading) {
+  if (loading || !userInfo) {
     return (
-      <div className="flex items-center justify-center h-screen">
+      <div className="flex items-center justify-center h-screen bg-gray-50">
         <div className="text-center">
           <FaSpinner className="animate-spin text-4xl text-[#062b2d] mx-auto mb-4" />
           <p className="text-gray-600">جاري التحميل...</p>
@@ -606,30 +797,57 @@ export default function Dashboard() {
 
   return (
     <div className="flex min-h-screen bg-gray-50">
-      <aside className="w-72 bg-white shadow-lg p-6">
-        <h2 className="text-2xl font-bold mb-8 text-[#062b2d]">لوحة التحكم</h2>
-        <nav className="space-y-4">
-          {[
-            { key: 'hero', label: 'الرئيسية', icon: <FaHome /> },
-            { key: 'general', label: 'قناة الإعلام', icon: <FaImage /> },
-            { key: 'categories', label: 'الأقسام الطبية', icon: <FaList /> },
-            { key: 'services', label: 'الخدمات', icon: <FaStethoscope /> },
-            { key: 'reports', label: 'أبرز الأرقام', icon: <FaChartBar /> },
-          ].map((tab) => (
-            <div
-              key={tab.key}
-              onClick={() => setCategory(tab.key)}
-              className={`flex items-center gap-3 p-3 rounded-lg cursor-pointer transition ${
-                category === tab.key
-                  ? 'bg-[#062b2d] text-white'
-                  : 'hover:bg-gray-100 text-gray-700'
-              }`}
-            >
-              {tab.icon}
-              <span className="font-medium">{tab.label}</span>
+      <aside className="w-72 bg-white shadow-lg">
+        {/* معلومات المستخدم */}
+        <div className="p-6 border-b border-gray-200">
+          <div className="flex items-center">
+            <div className="w-10 h-10 bg-gradient-to-br from-[#48D690] to-[#28a49c] rounded-full flex items-center justify-center">
+              <FaUser className="text-white" />
             </div>
-          ))}
-        </nav>
+            <div className="mr-3">
+              <h3 className="text-sm font-semibold text-gray-900">{userInfo.username}</h3>
+              <p className="text-xs text-gray-500">{userInfo.role === 'admin' ? 'مدير النظام' : 'مستخدم'}</p>
+            </div>
+          </div>
+        </div>
+
+        {/* القائمة */}
+        <div className="p-6">
+          <h2 className="text-2xl font-bold mb-8 text-[#062b2d]">لوحة التحكم</h2>
+          <nav className="space-y-4">
+            {[
+              { key: 'hero', label: 'الرئيسية', icon: <FaHome /> },
+              { key: 'general', label: 'قناة الإعلام', icon: <FaImage /> },
+              { key: 'categories', label: 'الأقسام الطبية', icon: <FaList /> },
+              { key: 'services', label: 'الخدمات', icon: <FaStethoscope /> },
+              { key: 'reports', label: 'أبرز الأرقام', icon: <FaChartBar /> },
+            ].map((tab) => (
+              <div
+                key={tab.key}
+                onClick={() => setCategory(tab.key)}
+                className={`flex items-center gap-3 p-3 rounded-lg cursor-pointer transition ${
+                  category === tab.key
+                    ? 'bg-[#062b2d] text-white'
+                    : 'hover:bg-gray-100 text-gray-700'
+                }`}
+              >
+                {tab.icon}
+                <span className="font-medium">{tab.label}</span>
+              </div>
+            ))}
+          </nav>
+
+          {/* زر تسجيل الخروج */}
+          <div className="mt-8 pt-8 border-t border-gray-200">
+            <button
+              onClick={handleLogout}
+              className="flex items-center gap-3 p-3 rounded-lg text-red-600 hover:bg-red-50 transition w-full"
+            >
+              <FaSignOutAlt />
+              <span className="font-medium">تسجيل الخروج</span>
+            </button>
+          </div>
+        </div>
       </aside>
 
       <main className="flex-1 p-8 rtl">
@@ -842,7 +1060,7 @@ export default function Dashboard() {
                     </label>
                     <input
                       type="text"
-                      placeholder="مثال: طب الأسنان"
+                      placeholder="مثال: فحص عام"
                       value={newService.title}
                       onChange={(e) =>
                         setNewService((prev) => ({ ...prev, title: e.target.value }))
@@ -1127,6 +1345,7 @@ export default function Dashboard() {
             <h3 className="text-xl font-semibold mb-6 text-[#062b2d]">
               {category === 'hero' ? 'الصور الرئيسية' : 'وسائط قناة الإعلام'}
             </h3>
+            
             <form
               onSubmit={handleAdd}
               className="flex flex-wrap gap-4 mb-8 bg-white p-6 rounded-lg shadow"
@@ -1157,6 +1376,7 @@ export default function Dashboard() {
                 <input
                   type="file"
                   hidden
+                  accept="image/*,video/*"
                   onChange={(e) =>
                     setNewMedia((prev) => ({ ...prev, file: e.target.files[0] }))
                   }
@@ -1221,7 +1441,7 @@ export default function Dashboard() {
                         />
                         <button
                           onClick={() => handleUpdate(item._id)}
-                          className="px-4 py-2 bg-[#062b2d] text-white rounded-lg mr-2"
+                          className="px-4 py-2 bg-[#062b2d] text-white rounded-lg ml-2"
                         >
                           حفظ
                         </button>
@@ -1252,6 +1472,13 @@ export default function Dashboard() {
                 </div>
               ))}
             </div>
+
+            {mediaItems.length === 0 && (
+              <div className="text-center py-16">
+                <FaImage className="text-4xl text-gray-400 mx-auto mb-4" />
+                <p className="text-gray-600 text-lg">لا توجد وسائط مضافة بعد</p>
+              </div>
+            )}
           </>
         )}
       </main>
