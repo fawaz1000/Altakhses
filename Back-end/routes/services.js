@@ -3,7 +3,7 @@ const express = require('express');
 const router = express.Router();
 const Service = require('../Models/Service');
 const Category = require('../Models/Category');
-const authenticateToken = require('../middleware/authMiddleware');
+const authenticateToken = require('../Middleware/authMiddleware');
 
 // جلب جميع الخدمات أو تصفية حسب القسم (مفتوح للجميع)
 router.get('/', async (req, res) => {
@@ -22,7 +22,11 @@ router.get('/', async (req, res) => {
     // تصفية حسب اسم القسم إذا تم تمرير category
     if (category) {
       const foundCategory = await Category.findOne({ 
-        $or: [{ name: category }, { slug: category }] 
+        $or: [
+          { name: category }, 
+          { slug: category },
+          { _id: category }
+        ] 
       });
       if (foundCategory) {
         query.categoryId = foundCategory._id;
@@ -33,7 +37,7 @@ router.get('/', async (req, res) => {
     let servicesQuery = Service.find(query).sort({ createdAt: -1 });
     
     // populate معلومات القسم إذا طُلب ذلك
-    if (populate === 'category') {
+    if (populate === 'category' || populate === 'true') {
       servicesQuery = servicesQuery.populate('categoryId', 'name description icon slug');
     }
     
@@ -62,6 +66,11 @@ router.get('/:id', async (req, res) => {
     res.json(service);
   } catch (error) {
     console.error('Error fetching service:', error);
+    
+    if (error.name === 'CastError') {
+      return res.status(400).json({ error: 'معرف الخدمة غير صحيح' });
+    }
+    
     res.status(500).json({ error: error.message });
   }
 });
@@ -70,26 +79,55 @@ router.get('/:id', async (req, res) => {
 router.post('/', authenticateToken, async (req, res) => {
   try {
     console.log('POST /api/services - Request body:', req.body);
+    console.log('User role:', req.user?.role);
     
-    const { name, description, categoryId, price, duration } = req.body;
-    
-    // التحقق من البيانات المطلوبة
-    if (!name || !description || !categoryId) {
-      return res.status(400).json({ 
-        error: 'اسم الخدمة ووصفها والقسم مطلوبة' 
+    // التحقق من صلاحيات المستخدم
+    if (req.user?.role !== 'admin') {
+      return res.status(403).json({ 
+        error: 'ليس لديك صلاحية لإضافة خدمات',
+        message: 'هذه العملية متاحة للمديرين فقط'
       });
     }
     
-    // التحقق من وجود القسم
-    const category = await Category.findById(categoryId);
-    if (!category) {
-      return res.status(400).json({ error: 'القسم المحدد غير موجود' });
+    const { name, title, description, categoryId, price, duration } = req.body;
+    
+    // التحقق من البيانات المطلوبة
+    if (!name || !description) {
+      return res.status(400).json({ 
+        error: 'اسم الخدمة ووصفها مطلوبان' 
+      });
+    }
+    
+    // إذا لم يتم تمرير categoryId، استخدم قسم افتراضي أو أنشئ قسم عام
+    let finalCategoryId = categoryId;
+    
+    if (!finalCategoryId) {
+      // البحث عن قسم "خدمات عامة" أو إنشاؤه
+      let generalCategory = await Category.findOne({ name: 'خدمات عامة' });
+      
+      if (!generalCategory) {
+        generalCategory = new Category({
+          name: 'خدمات عامة',
+          description: 'خدمات طبية عامة',
+          icon: 'FaStethoscope'
+        });
+        await generalCategory.save();
+        console.log('Created general category:', generalCategory._id);
+      }
+      
+      finalCategoryId = generalCategory._id;
+    } else {
+      // التحقق من وجود القسم المحدد
+      const category = await Category.findById(finalCategoryId);
+      if (!category) {
+        return res.status(400).json({ error: 'القسم المحدد غير موجود' });
+      }
     }
     
     // التحقق من عدم وجود خدمة بنفس الاسم في نفس القسم
     const existingService = await Service.findOne({ 
       name,
-      categoryId,
+      categoryId: finalCategoryId,
       isActive: true
     });
     
@@ -101,8 +139,9 @@ router.post('/', authenticateToken, async (req, res) => {
 
     const service = new Service({
       name,
+      title: title || name,
       description,
-      categoryId,
+      categoryId: finalCategoryId,
       price: price ? parseFloat(price) : undefined,
       duration
     });
@@ -117,9 +156,19 @@ router.post('/', authenticateToken, async (req, res) => {
     res.status(201).json(savedService);
   } catch (error) {
     console.error('Error creating service:', error);
+    
     if (error.code === 11000) {
       return res.status(400).json({ error: 'اسم الخدمة موجود مسبقاً في هذا القسم' });
     }
+    
+    if (error.name === 'ValidationError') {
+      const validationErrors = Object.values(error.errors).map(err => err.message);
+      return res.status(400).json({ 
+        error: 'خطأ في التحقق من البيانات',
+        details: validationErrors
+      });
+    }
+    
     res.status(500).json({ error: error.message });
   }
 });
@@ -129,7 +178,14 @@ router.put('/:id', authenticateToken, async (req, res) => {
   try {
     console.log(`PUT /api/services/${req.params.id} - Request body:`, req.body);
     
-    const { name, description, categoryId, price, duration } = req.body;
+    // التحقق من صلاحيات المستخدم
+    if (req.user?.role !== 'admin') {
+      return res.status(403).json({ 
+        error: 'ليس لديك صلاحية لتعديل الخدمات'
+      });
+    }
+    
+    const { name, title, description, categoryId, price, duration } = req.body;
     
     // إذا تم تغيير القسم، تحقق من وجوده
     if (categoryId) {
@@ -141,10 +197,12 @@ router.put('/:id', authenticateToken, async (req, res) => {
     
     const updateData = {
       name,
+      title: title || name,
       description,
       categoryId,
       price: price ? parseFloat(price) : undefined,
-      duration
+      duration,
+      updatedAt: new Date()
     };
     
     // إزالة القيم undefined
@@ -157,7 +215,11 @@ router.put('/:id', authenticateToken, async (req, res) => {
     const service = await Service.findByIdAndUpdate(
       req.params.id,
       updateData,
-      { new: true, runValidators: true }
+      { 
+        new: true, 
+        runValidators: true,
+        context: 'query'
+      }
     ).populate('categoryId', 'name description icon slug');
 
     if (!service) {
@@ -168,9 +230,23 @@ router.put('/:id', authenticateToken, async (req, res) => {
     res.json(service);
   } catch (error) {
     console.error('Error updating service:', error);
+    
+    if (error.name === 'CastError') {
+      return res.status(400).json({ error: 'معرف الخدمة غير صحيح' });
+    }
+    
     if (error.code === 11000) {
       return res.status(400).json({ error: 'اسم الخدمة موجود مسبقاً في هذا القسم' });
     }
+    
+    if (error.name === 'ValidationError') {
+      const validationErrors = Object.values(error.errors).map(err => err.message);
+      return res.status(400).json({ 
+        error: 'خطأ في التحقق من البيانات',
+        details: validationErrors
+      });
+    }
+    
     res.status(500).json({ error: error.message });
   }
 });
@@ -180,6 +256,13 @@ router.delete('/:id', authenticateToken, async (req, res) => {
   try {
     console.log(`DELETE /api/services/${req.params.id}`);
     
+    // التحقق من صلاحيات المستخدم
+    if (req.user?.role !== 'admin') {
+      return res.status(403).json({ 
+        error: 'ليس لديك صلاحية لحذف الخدمات'
+      });
+    }
+    
     const service = await Service.findByIdAndDelete(req.params.id);
     
     if (!service) {
@@ -187,9 +270,20 @@ router.delete('/:id', authenticateToken, async (req, res) => {
     }
 
     console.log('Service deleted successfully:', service.name);
-    res.json({ message: 'تم حذف الخدمة بنجاح' });
+    res.json({ 
+      message: 'تم حذف الخدمة بنجاح',
+      deletedService: {
+        id: service._id,
+        name: service.name
+      }
+    });
   } catch (error) {
     console.error('Error deleting service:', error);
+    
+    if (error.name === 'CastError') {
+      return res.status(400).json({ error: 'معرف الخدمة غير صحيح' });
+    }
+    
     res.status(500).json({ error: error.message });
   }
 });
@@ -238,6 +332,40 @@ router.get('/stats/by-category', async (req, res) => {
     console.error('Error getting services stats:', error);
     res.status(500).json({ error: error.message });
   }
+});
+
+// البحث في الخدمات (مفتوح للجميع)
+router.get('/search/:query', async (req, res) => {
+  try {
+    const { query } = req.params;
+    console.log('Searching services for:', query);
+    
+    const services = await Service.find({
+      isActive: true,
+      $or: [
+        { name: { $regex: query, $options: 'i' } },
+        { title: { $regex: query, $options: 'i' } },
+        { description: { $regex: query, $options: 'i' } }
+      ]
+    }).populate('categoryId', 'name description icon slug').limit(20);
+    
+    console.log(`Found ${services.length} services matching "${query}"`);
+    res.json(services);
+  } catch (error) {
+    console.error('Error searching services:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// إضافة endpoint للتحقق من صحة الاتصال
+router.get('/health/check', (req, res) => {
+  console.log('Services health check requested');
+  res.status(200).json({
+    status: 'OK',
+    message: 'Services API is working',
+    timestamp: new Date().toISOString(),
+    endpoint: '/api/services'
+  });
 });
 
 module.exports = router;

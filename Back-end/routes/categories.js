@@ -1,4 +1,4 @@
-// Back-end/routes/categories.js - Updated with better error handling and CORS support
+// Back-end/routes/categories.js - Complete Fixed Version
 const express = require('express');
 const router = express.Router();
 const Category = require('../Models/Category');
@@ -13,8 +13,6 @@ router.use((req, res, next) => {
   
   // تسجيل الطلبات
   console.log(`[${new Date().toISOString()}] ${req.method} ${req.originalUrl}`);
-  console.log('Request headers:', req.headers);
-  console.log('Request body:', req.body);
   
   next();
 });
@@ -28,10 +26,9 @@ router.options('*', (req, res) => {
 router.get('/', async (req, res) => {
   try {
     console.log('GET /api/categories - Fetching categories...');
-    console.log('Query parameters:', req.query);
     
     // إضافة بيانات افتراضية في حالة عدم وجود أقسام
-    let categories = await Category.find({ isActive: true }).sort({ createdAt: -1 });
+    let categories = await Category.find({ isActive: true }).sort({ order: 1, createdAt: -1 });
     
     console.log(`Found ${categories.length} categories from database`);
     
@@ -43,32 +40,38 @@ router.get('/', async (req, res) => {
         {
           name: 'طب الأسنان',
           description: 'قسم طب الأسنان يقدم خدمات شاملة للعناية بصحة الفم والأسنان',
-          icon: 'FaTooth'
+          icon: 'FaTooth',
+          order: 1
         },
         {
           name: 'طب العيون',
           description: 'قسم طب العيون متخصص في تشخيص وعلاج جميع أمراض العين',
-          icon: 'FaEye'
+          icon: 'FaEye',
+          order: 2
         },
         {
           name: 'طب الأطفال',
           description: 'قسم طب الأطفال يهتم بصحة الأطفال من الولادة حتى المراهقة',
-          icon: 'FaBaby'
+          icon: 'FaBaby',
+          order: 3
         },
         {
           name: 'الطب الباطني',
           description: 'قسم الطب الباطني يقدم الرعاية الطبية الشاملة للبالغين',
-          icon: 'FaStethoscope'
+          icon: 'FaStethoscope',
+          order: 4
         },
         {
           name: 'جراحة العظام',
           description: 'قسم جراحة العظام متخصص في علاج إصابات وأمراض الجهاز الحركي',
-          icon: 'GiBrokenBone'
+          icon: 'GiBrokenBone',
+          order: 5
         },
         {
           name: 'النساء والولادة',
           description: 'قسم النساء والولادة يقدم رعاية شاملة للمرأة في جميع مراحل حياتها',
-          icon: 'MdPregnantWoman'
+          icon: 'MdPregnantWoman',
+          order: 6
         }
       ];
 
@@ -101,13 +104,13 @@ router.get('/', async (req, res) => {
         icon: category.icon || 'FaStethoscope',
         slug: category.slug || category.name?.replace(/\s+/g, '-').toLowerCase(),
         isActive: category.isActive !== false,
+        order: category.order || 0,
         createdAt: category.createdAt,
         updatedAt: category.updatedAt
       };
     });
     
     console.log(`Sending ${processedCategories.length} processed categories`);
-    console.log('Categories data:', processedCategories.map(c => ({ id: c._id, name: c.name })));
     
     // إضافة headers إضافية للاستجابة
     res.set({
@@ -159,6 +162,7 @@ router.get('/:id', async (req, res) => {
       icon: category.icon || 'FaStethoscope',
       slug: category.slug || category.name?.replace(/\s+/g, '-').toLowerCase(),
       isActive: category.isActive !== false,
+      order: category.order || 0,
       createdAt: category.createdAt,
       updatedAt: category.updatedAt
     };
@@ -200,7 +204,7 @@ router.post('/', authenticateToken, async (req, res) => {
       });
     }
     
-    const { name, title, description, icon } = req.body;
+    const { name, title, description, icon, order } = req.body;
     
     // التحقق من البيانات المطلوبة
     if (!name || !name.trim()) {
@@ -242,7 +246,11 @@ router.post('/', authenticateToken, async (req, res) => {
       name: name.trim(),
       title: (title || name).trim(),
       description: description.trim(),
-      icon: icon || 'FaStethoscope'
+      icon: icon || 'FaStethoscope',
+      order: order || 0,
+      metadata: {
+        createdBy: req.user?.id || req.user?.username
+      }
     };
 
     console.log('Creating category with data:', categoryData);
@@ -261,6 +269,7 @@ router.post('/', authenticateToken, async (req, res) => {
       icon: category.icon,
       slug: category.slug,
       isActive: category.isActive,
+      order: category.order,
       createdAt: category.createdAt,
       updatedAt: category.updatedAt
     };
@@ -314,7 +323,7 @@ router.put('/:id', authenticateToken, async (req, res) => {
       });
     }
     
-    const { name, title, description, icon } = req.body;
+    const { name, title, description, icon, order } = req.body;
     
     // التحقق من البيانات المطلوبة
     if (!name || !name.trim()) {
@@ -361,7 +370,9 @@ router.put('/:id', authenticateToken, async (req, res) => {
       title: (title || name).trim(),
       description: description.trim(),
       icon: icon || 'FaStethoscope',
-      updatedAt: new Date()
+      order: order || 0,
+      updatedAt: new Date(),
+      'metadata.updatedBy': req.user?.id || req.user?.username
     };
     
     console.log('Updating category with data:', updateData);
@@ -395,6 +406,7 @@ router.put('/:id', authenticateToken, async (req, res) => {
       icon: category.icon,
       slug: category.slug,
       isActive: category.isActive,
+      order: category.order,
       createdAt: category.createdAt,
       updatedAt: category.updatedAt
     };
@@ -509,9 +521,49 @@ router.delete('/:id', authenticateToken, async (req, res) => {
   }
 });
 
+// إحصائيات الأقسام (مفتوح للجميع)
+router.get('/stats/summary', async (req, res) => {
+  try {
+    console.log('GET /api/categories/stats/summary');
+    
+    const totalCategories = await Category.countDocuments({ isActive: true });
+    const categoriesWithServices = await Category.aggregate([
+      { $match: { isActive: true } },
+      {
+        $lookup: {
+          from: 'services',
+          localField: '_id',
+          foreignField: 'categoryId',
+          as: 'services'
+        }
+      },
+      {
+        $project: {
+          name: 1,
+          servicesCount: { $size: '$services' }
+        }
+      },
+      { $sort: { servicesCount: -1 } }
+    ]);
+    
+    const stats = {
+      totalCategories,
+      categoriesWithServices: categoriesWithServices.length,
+      topCategories: categoriesWithServices.slice(0, 5),
+      timestamp: new Date().toISOString()
+    };
+    
+    console.log('Categories stats:', stats);
+    res.json(stats);
+  } catch (error) {
+    console.error('Error getting categories stats:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
 // إضافة endpoint للتحقق من صحة الاتصال
 router.get('/health/check', (req, res) => {
-  console.log('Health check requested');
+  console.log('Categories health check requested');
   res.status(200).json({
     status: 'OK',
     message: 'Categories API is working',
