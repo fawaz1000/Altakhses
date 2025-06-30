@@ -1,4 +1,4 @@
-// Back-end/server.js
+// Back-end/server.js - مُحدث ومُصحح
 require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
@@ -17,7 +17,6 @@ const app = express();
 // إعداد CORS متقدم لدعم الكوكيز من الواجهة
 const corsOptions = {
   origin: function (origin, callback) {
-    // السماح للطلبات من المصادر المحددة أو الطلبات المحلية (بدون origin)
     const allowedOrigins = [
       process.env.CORS_ORIGIN || 'http://localhost:3000',
       'http://localhost:3000',
@@ -39,16 +38,14 @@ const corsOptions = {
 };
 
 app.use(cors(corsOptions));
-
-// معالجة طلبات OPTIONS (preflight)
 app.options('*', cors(corsOptions));
 
-// لتحليل جسد الطلب (JSON) وللتعامل مع الكوكي
+// المتطلبات الأساسية
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 app.use(cookieParser());
 
-// إنشاء مجلدات الرفع إذا لم تكن موجودة
+// إنشاء مجلدات الرفع
 const createUploadDirs = () => {
   const dirs = [
     path.join(__dirname, 'uploads'),
@@ -65,18 +62,17 @@ const createUploadDirs = () => {
 
 createUploadDirs();
 
-// ملفات الصور والفيديو المرفوع تُعرض كـ static
+// الملفات الثابتة
 app.use('/uploads', express.static(path.join(__dirname, 'uploads'), {
-  maxAge: '1d', // تخزين مؤقت ليوم واحد
+  maxAge: '1d',
   etag: true
 }));
 
-// إضافة middleware للتسجيل
+// تسجيل الطلبات
 app.use((req, res, next) => {
   const timestamp = new Date().toISOString();
   console.log(`[${timestamp}] ${req.method} ${req.path} - IP: ${req.ip}`);
   
-  // تسجيل headers المهمة
   if (req.headers.authorization) {
     console.log(`  🔑 Auth: ${req.headers.authorization.substring(0, 20)}...`);
   }

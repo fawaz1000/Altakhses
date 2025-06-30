@@ -1,4 +1,4 @@
-// Back-end/routes/auth.js
+// Back-end/routes/auth.js - مُصحح
 require('dotenv').config();
 const express    = require('express');
 const jwt        = require('jsonwebtoken');
@@ -6,6 +6,7 @@ const bcrypt     = require('bcryptjs');
 const rateLimit  = require('express-rate-limit');
 const User       = require('../Models/User');
 const adminStatic= require('../data/admin');
+// 🔧 تصحيح الاستيراد - استيراد مباشر بدلاً من destructuring
 const authenticateToken = require('../Middleware/authMiddleware');
 
 const router = express.Router();

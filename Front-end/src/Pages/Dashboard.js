@@ -1,4 +1,4 @@
-// Front-end/src/Pages/Dashboard.js - الجزء المصحح
+// Front-end/src/Pages/Dashboard.js - مُحدث لحل مشاكل المصادقة والإضافة
 import React, { useEffect, useState, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { jwtDecode } from 'jwt-decode';
@@ -55,13 +55,15 @@ export default function Dashboard() {
     newVisitors: '',
   });
   const [newService, setNewService] = useState({
-    title: '',
+    name: '',
     description: '',
+    categoryId: '',
   });
   const [editingServiceId, setEditingServiceId] = useState(null);
   const [updatedService, setUpdatedService] = useState({
-    title: '',
+    name: '',
     description: '',
+    categoryId: '',
   });
 
   // إضافة states للأقسام
@@ -99,15 +101,45 @@ export default function Dashboard() {
     setTimeout(() => setMessage({ type: '', text: '' }), 5000);
   };
 
-  // دالة للحصول على التوكن مع التحقق
+  // دالة للحصول على التوكن مع التحقق المحسن
   const getAuthToken = () => {
     const token = localStorage.getItem('token');
     if (!token) {
-      console.log('❌ No token found');
+      console.log('❌ No token found in localStorage');
+      showMessage('error', 'انتهت جلسة المستخدم، يرجى تسجيل الدخول مرة أخرى');
       navigate('/admin/login');
       return null;
     }
-    return token;
+
+    try {
+      // التحقق من صحة التوكن وانتهاء صلاحيته
+      const decoded = jwtDecode(token);
+      const currentTime = Date.now() / 1000;
+
+      if (decoded.exp < currentTime) {
+        console.log('❌ Token expired');
+        localStorage.removeItem('token');
+        showMessage('error', 'انتهت صلاحية الجلسة، يرجى تسجيل الدخول مرة أخرى');
+        navigate('/admin/login');
+        return null;
+      }
+
+      if (decoded.role !== 'admin') {
+        console.log('❌ User is not admin');
+        localStorage.removeItem('token');
+        showMessage('error', 'ليس لديك صلاحية للوصول');
+        navigate('/admin/login');
+        return null;
+      }
+
+      return token;
+    } catch (error) {
+      console.error('❌ Invalid token:', error);
+      localStorage.removeItem('token');
+      showMessage('error', 'رمز المصادقة غير صحيح');
+      navigate('/admin/login');
+      return null;
+    }
   };
 
   // دالة للحصول على headers المطلوبة
@@ -121,52 +153,54 @@ export default function Dashboard() {
     };
   };
 
+  // دالة للتعامل مع أخطاء API
+  const handleApiError = (error, defaultMessage = 'حدث خطأ غير متوقع') => {
+    console.error('API Error:', error);
+
+    if (error.response?.status === 401) {
+      localStorage.removeItem('token');
+      showMessage('error', 'انتهت صلاحية الجلسة');
+      navigate('/admin/login');
+      return;
+    }
+
+    if (error.response?.status === 403) {
+      showMessage('error', 'ليس لديك صلاحية لهذه العملية');
+      return;
+    }
+
+    const errorMessage = error.response?.data?.error || 
+                        error.response?.data?.message || 
+                        error.message || 
+                        defaultMessage;
+    
+    showMessage('error', errorMessage);
+  };
+
   // التحقق من المصادقة عند تحميل المكون
   useEffect(() => {
     const verifyAuth = async () => {
-      const token = localStorage.getItem('token');
-      if (!token) {
-        console.log('❌ No token found, redirecting to login');
-        navigate('/admin/login');
-        return;
-      }
+      const token = getAuthToken();
+      if (!token) return;
 
       try {
-        // التحقق من صحة التوكن
-        const { exp, role, username } = jwtDecode(token);
-        
-        if (exp * 1000 < Date.now()) {
-          console.log('❌ Token expired');
-          localStorage.removeItem('token');
-          navigate('/admin/login');
-          return;
-        }
-
-        if (role !== 'admin') {
-          console.log('❌ User is not admin');
-          localStorage.removeItem('token');
-          navigate('/admin/login');
-          return;
-        }
-
         // التحقق من صحة التوكن مع الخادم
         const response = await axios.get(`${API_BASE}/api/admin/verify`, {
           headers: { Authorization: `Bearer ${token}` },
           withCredentials: true,
-          timeout: 5000
+          timeout: 10000
         });
 
-        if (response.data.valid) {
-          setUserInfo({ username, role });
-          console.log('✅ Authentication verified for:', username);
+        if (response.data.valid && response.data.user) {
+          setUserInfo(response.data.user);
+          console.log('✅ Authentication verified for:', response.data.user.username);
         } else {
           throw new Error('Invalid token response');
         }
 
       } catch (error) {
         console.error('❌ Auth verification failed:', error);
-        localStorage.removeItem('token');
-        navigate('/admin/login');
+        handleApiError(error, 'فشل في التحقق من المصادقة');
       }
     };
 
@@ -193,10 +227,7 @@ export default function Dashboard() {
     } catch (error) {
       console.error('❌ Error fetching years:', error);
       setAvailableYears([]);
-      if (error.response?.status === 401) {
-        localStorage.removeItem('token');
-        navigate('/admin/login');
-      }
+      handleApiError(error, 'خطأ في جلب السنوات المتاحة');
     }
   }, [navigate]);
 
@@ -225,13 +256,7 @@ export default function Dashboard() {
     } catch (error) {
       console.error('❌ Error fetching categories:', error);
       setCategories([]);
-      
-      if (error.response?.status === 401) {
-        localStorage.removeItem('token');
-        navigate('/admin/login');
-      } else {
-        showMessage('error', `خطأ في جلب الأقسام: ${error.message}`);
-      }
+      handleApiError(error, 'خطأ في جلب الأقسام');
     }
   }, [navigate]);
 
@@ -268,10 +293,15 @@ export default function Dashboard() {
           withCredentials: true,
           timeout: 10000
         });
-        setServices(data || []);
+        
+        // التعامل مع الاستجابة الجديدة
+        const servicesData = data.success ? data.data : data;
+        setServices(servicesData || []);
         setMediaItems([]);
         setReportMetrics([]);
-        setCategories([]);
+        
+        // جلب الأقسام أيضاً لاستخدامها في النماذج
+        await fetchCategories();
       } else if (category === 'categories') {
         // جلب الأقسام
         await fetchCategories();
@@ -300,12 +330,7 @@ export default function Dashboard() {
       setServices([]);
       setCategories([]);
       
-      if (error.response?.status === 401) {
-        localStorage.removeItem('token');
-        navigate('/admin/login');
-      } else {
-        showMessage('error', 'حدث خطأ في جلب البيانات');
-      }
+      handleApiError(error, 'خطأ في جلب البيانات');
     } finally {
       setLoading(false);
     }
@@ -339,17 +364,20 @@ export default function Dashboard() {
     if (isSubmitting) return;
 
     if (!newCategory.name.trim() || !newCategory.description.trim()) {
-      showMessage('error', 'يرجى ملء جميع الحقول');
+      showMessage('error', 'يرجى ملء جميع الحقول المطلوبة');
       return;
     }
 
     setIsSubmitting(true);
     const headers = getAuthHeaders();
-    if (!headers) return;
+    if (!headers) {
+      setIsSubmitting(false);
+      return;
+    }
 
     try {
       console.log('Adding category:', newCategory);
-      const { data } = await axios.post(
+      const response = await axios.post(
         `${API_BASE}/api/categories`,
         newCategory,
         {
@@ -359,20 +387,18 @@ export default function Dashboard() {
         }
       );
       
-      console.log('Category added successfully:', data);
-      setCategories([data, ...categories]);
-      setNewCategory({ name: '', description: '', icon: 'FaStethoscope' });
-      showMessage('success', 'تم إضافة القسم بنجاح');
+      console.log('Category add response:', response.data);
+      
+      if (response.data.success || response.data._id) {
+        setCategories([response.data, ...categories]);
+        setNewCategory({ name: '', description: '', icon: 'FaStethoscope' });
+        showMessage('success', response.data.message || 'تم إضافة القسم بنجاح');
+      } else {
+        throw new Error(response.data.error || 'فشل في إضافة القسم');
+      }
     } catch (error) {
       console.error('خطأ في إضافة القسم:', error);
-      
-      if (error.response?.status === 401) {
-        localStorage.removeItem('token');
-        navigate('/admin/login');
-      } else {
-        const errorMessage = error.response?.data?.error || error.message || 'فشل في إضافة القسم';
-        showMessage('error', errorMessage);
-      }
+      handleApiError(error, 'فشل في إضافة القسم');
     } finally {
       setIsSubmitting(false);
     }
@@ -390,7 +416,7 @@ export default function Dashboard() {
 
   const handleUpdateCategory = async (id) => {
     if (!updatedCategory.name.trim() || !updatedCategory.description.trim()) {
-      showMessage('error', 'يرجى ملء جميع الحقول');
+      showMessage('error', 'يرجى ملء جميع الحقول المطلوبة');
       return;
     }
 
@@ -399,7 +425,7 @@ export default function Dashboard() {
 
     try {
       console.log('Updating category:', id, updatedCategory);
-      const { data } = await axios.put(
+      const response = await axios.put(
         `${API_BASE}/api/categories/${id}`,
         updatedCategory,
         {
@@ -409,20 +435,18 @@ export default function Dashboard() {
         }
       );
       
-      console.log('Category updated successfully:', data);
-      setCategories(categories.map((c) => (c._id === id ? data : c)));
-      setEditingCategoryId(null);
-      showMessage('success', 'تم تحديث القسم بنجاح');
+      console.log('Category update response:', response.data);
+      
+      if (response.data.success || response.data._id) {
+        setCategories(categories.map((c) => (c._id === id ? response.data : c)));
+        setEditingCategoryId(null);
+        showMessage('success', response.data.message || 'تم تحديث القسم بنجاح');
+      } else {
+        throw new Error(response.data.error || 'فشل في تحديث القسم');
+      }
     } catch (error) {
       console.error('خطأ في تحديث القسم:', error);
-      
-      if (error.response?.status === 401) {
-        localStorage.removeItem('token');
-        navigate('/admin/login');
-      } else {
-        const errorMessage = error.response?.data?.error || error.message || 'فشل في تحديث القسم';
-        showMessage('error', errorMessage);
-      }
+      handleApiError(error, 'فشل في تحديث القسم');
     }
   };
 
@@ -435,29 +459,156 @@ export default function Dashboard() {
 
     try {
       console.log('Deleting category:', id);
-      await axios.delete(`${API_BASE}/api/categories/${id}`, {
+      const response = await axios.delete(`${API_BASE}/api/categories/${id}`, {
         headers,
         withCredentials: true,
         timeout: 10000
       });
       
-      console.log('Category deleted successfully');
-      setCategories(categories.filter((c) => c._id !== id));
-      showMessage('success', 'تم حذف القسم بنجاح');
+      console.log('Category delete response:', response.data);
+      
+      if (response.data.success || response.status === 200) {
+        setCategories(categories.filter((c) => c._id !== id));
+        showMessage('success', response.data.message || 'تم حذف القسم بنجاح');
+      } else {
+        throw new Error(response.data.error || 'فشل في حذف القسم');
+      }
     } catch (error) {
       console.error('خطأ في حذف القسم:', error);
-      
-      if (error.response?.status === 401) {
-        localStorage.removeItem('token');
-        navigate('/admin/login');
-      } else {
-        const errorMessage = error.response?.data?.error || error.message || 'فشل في حذف القسم';
-        showMessage('error', errorMessage);
-      }
+      handleApiError(error, 'فشل في حذف القسم');
     }
   };
 
-  // باقي الدوال (handleAdd, handleEdit, handleUpdate, handleDelete, etc.)
+  // إضافة خدمة جديدة
+  const handleAddService = async (e) => {
+    e.preventDefault();
+    if (isSubmitting) return;
+
+    if (!newService.name.trim() || !newService.description.trim()) {
+      showMessage('error', 'يرجى ملء جميع الحقول المطلوبة');
+      return;
+    }
+
+    setIsSubmitting(true);
+    const headers = getAuthHeaders();
+    if (!headers) {
+      setIsSubmitting(false);
+      return;
+    }
+
+    try {
+      console.log('Adding service:', newService);
+      const response = await axios.post(
+        `${API_BASE}/api/services`,
+        newService,
+        {
+          headers,
+          withCredentials: true,
+          timeout: 10000
+        }
+      );
+      
+      console.log('Service add response:', response.data);
+      
+      if (response.data.success) {
+        setServices([response.data.data, ...services]);
+        setNewService({ name: '', description: '', categoryId: '' });
+        showMessage('success', response.data.message || 'تم إضافة الخدمة بنجاح');
+      } else if (response.data._id) {
+        setServices([response.data, ...services]);
+        setNewService({ name: '', description: '', categoryId: '' });
+        showMessage('success', 'تم إضافة الخدمة بنجاح');
+      } else {
+        throw new Error(response.data.error || 'فشل في إضافة الخدمة');
+      }
+    } catch (error) {
+      console.error('خطأ في إضافة الخدمة:', error);
+      handleApiError(error, 'فشل في إضافة الخدمة');
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  // تعديل خدمة
+  const handleEditService = (service) => {
+    setEditingServiceId(service._id);
+    setUpdatedService({ 
+      name: service.name || service.title, 
+      description: service.description,
+      categoryId: service.categoryId?._id || service.categoryId || ''
+    });
+  };
+
+  const handleUpdateService = async (id) => {
+    if (!updatedService.name.trim() || !updatedService.description.trim()) {
+      showMessage('error', 'يرجى ملء جميع الحقول المطلوبة');
+      return;
+    }
+
+    const headers = getAuthHeaders();
+    if (!headers) return;
+
+    try {
+      console.log('Updating service:', id, updatedService);
+      const response = await axios.put(
+        `${API_BASE}/api/services/${id}`,
+        updatedService,
+        {
+          headers,
+          withCredentials: true,
+          timeout: 10000
+        }
+      );
+      
+      console.log('Service update response:', response.data);
+      
+      if (response.data.success) {
+        setServices(services.map((s) => (s._id === id ? response.data.data : s)));
+        setEditingServiceId(null);
+        showMessage('success', response.data.message || 'تم تحديث الخدمة بنجاح');
+      } else if (response.data._id) {
+        setServices(services.map((s) => (s._id === id ? response.data : s)));
+        setEditingServiceId(null);
+        showMessage('success', 'تم تحديث الخدمة بنجاح');
+      } else {
+        throw new Error(response.data.error || 'فشل في تحديث الخدمة');
+      }
+    } catch (error) {
+      console.error('خطأ في تحديث الخدمة:', error);
+      handleApiError(error, 'فشل في تحديث الخدمة');
+    }
+  };
+
+  // حذف خدمة
+  const handleDeleteService = async (id) => {
+    if (!window.confirm('هل أنت متأكد من حذف هذه الخدمة؟')) return;
+    
+    const headers = getAuthHeaders();
+    if (!headers) return;
+
+    try {
+      console.log('Deleting service:', id);
+      const response = await axios.delete(`${API_BASE}/api/services/${id}`, {
+        headers,
+        withCredentials: true,
+        timeout: 10000
+      });
+      
+      console.log('Service delete response:', response.data);
+      
+      if (response.data.success || response.status === 200) {
+        setServices(services.filter((s) => s._id !== id));
+        showMessage('success', response.data.message || 'تم حذف الخدمة بنجاح');
+      } else {
+        throw new Error(response.data.error || 'فشل في حذف الخدمة');
+      }
+    } catch (error) {
+      console.error('خطأ في حذف الخدمة:', error);
+      handleApiError(error, 'فشل في حذف الخدمة');
+    }
+  };
+
+  // باقي الدوال (handleAdd, handleEdit, handleUpdate, handleDelete للوسائط)
   const handleAdd = async (e) => {
     e.preventDefault();
     if (isSubmitting) return;
@@ -469,7 +620,10 @@ export default function Dashboard() {
 
     setIsSubmitting(true);
     const token = getAuthToken();
-    if (!token) return;
+    if (!token) {
+      setIsSubmitting(false);
+      return;
+    }
 
     const form = new FormData();
     form.append('media', newMedia.file);
@@ -492,13 +646,7 @@ export default function Dashboard() {
       showMessage('success', 'تم إضافة الملف بنجاح');
     } catch (error) {
       console.error('خطأ في إضافة الملف:', error);
-      
-      if (error.response?.status === 401) {
-        localStorage.removeItem('token');
-        navigate('/admin/login');
-      } else {
-        showMessage('error', 'فشل في إضافة الملف');
-      }
+      handleApiError(error, 'فشل في إضافة الملف');
     } finally {
       setIsSubmitting(false);
     }
@@ -528,13 +676,7 @@ export default function Dashboard() {
       showMessage('success', 'تم تحديث الملف بنجاح');
     } catch (error) {
       console.error('خطأ في تحديث الملف:', error);
-      
-      if (error.response?.status === 401) {
-        localStorage.removeItem('token');
-        navigate('/admin/login');
-      } else {
-        showMessage('error', 'فشل في تحديث الملف');
-      }
+      handleApiError(error, 'فشل في تحديث الملف');
     }
   };
 
@@ -554,117 +696,7 @@ export default function Dashboard() {
       showMessage('success', 'تم حذف الملف بنجاح');
     } catch (error) {
       console.error('خطأ في حذف الملف:', error);
-      
-      if (error.response?.status === 401) {
-        localStorage.removeItem('token');
-        navigate('/admin/login');
-      } else {
-        showMessage('error', 'فشل في حذف الملف');
-      }
-    }
-  };
-
-  // إضافة خدمة جديدة
-  const handleAddService = async (e) => {
-    e.preventDefault();
-    if (isSubmitting) return;
-
-    if (!newService.title.trim() || !newService.description.trim()) {
-      showMessage('error', 'يرجى ملء جميع الحقول');
-      return;
-    }
-
-    setIsSubmitting(true);
-    const headers = getAuthHeaders();
-    if (!headers) return;
-
-    try {
-      const { data } = await axios.post(
-        `${API_BASE}/api/services`,
-        newService,
-        {
-          headers,
-          withCredentials: true,
-          timeout: 10000
-        }
-      );
-      
-      setServices([data, ...services]);
-      setNewService({ title: '', description: '' });
-      showMessage('success', 'تم إضافة الخدمة بنجاح');
-    } catch (error) {
-      console.error('خطأ في إضافة الخدمة:', error);
-      
-      if (error.response?.status === 401) {
-        localStorage.removeItem('token');
-        navigate('/admin/login');
-      } else {
-        showMessage('error', 'فشل في إضافة الخدمة');
-      }
-    } finally {
-      setIsSubmitting(false);
-    }
-  };
-
-  // تعديل خدمة
-  const handleEditService = (service) => {
-    setEditingServiceId(service._id);
-    setUpdatedService({ title: service.title, description: service.description });
-  };
-
-  const handleUpdateService = async (id) => {
-    const headers = getAuthHeaders();
-    if (!headers) return;
-
-    try {
-      const { data } = await axios.put(
-        `${API_BASE}/api/services/${id}`,
-        updatedService,
-        {
-          headers,
-          withCredentials: true,
-          timeout: 10000
-        }
-      );
-      setServices(services.map((s) => (s._id === id ? data : s)));
-      setEditingServiceId(null);
-      showMessage('success', 'تم تحديث الخدمة بنجاح');
-    } catch (error) {
-      console.error('خطأ في تحديث الخدمة:', error);
-      
-      if (error.response?.status === 401) {
-        localStorage.removeItem('token');
-        navigate('/admin/login');
-      } else {
-        showMessage('error', 'فشل في تحديث الخدمة');
-      }
-    }
-  };
-
-  // حذف خدمة
-  const handleDeleteService = async (id) => {
-    if (!window.confirm('هل أنت متأكد من حذف هذه الخدمة؟')) return;
-    
-    const headers = getAuthHeaders();
-    if (!headers) return;
-
-    try {
-      await axios.delete(`${API_BASE}/api/services/${id}`, {
-        headers,
-        withCredentials: true,
-        timeout: 10000
-      });
-      setServices(services.filter((s) => s._id !== id));
-      showMessage('success', 'تم حذف الخدمة بنجاح');
-    } catch (error) {
-      console.error('خطأ في حذف الخدمة:', error);
-      
-      if (error.response?.status === 401) {
-        localStorage.removeItem('token');
-        navigate('/admin/login');
-      } else {
-        showMessage('error', 'فشل في حذف الخدمة');
-      }
+      handleApiError(error, 'فشل في حذف الملف');
     }
   };
 
@@ -688,7 +720,10 @@ export default function Dashboard() {
 
     setIsSubmitting(true);
     const headers = getAuthHeaders();
-    if (!headers) return;
+    if (!headers) {
+      setIsSubmitting(false);
+      return;
+    }
     
     const metrics = [
       { label: 'سنوات خبرة', count: parseInt(newMetric.exp), suffix: '+' },
@@ -730,14 +765,7 @@ export default function Dashboard() {
       showMessage('success', `تم حفظ تقرير سنة ${parseInt(newMetric.year)} بنجاح`);
     } catch (error) {
       console.error('خطأ في حفظ التقرير:', error);
-      
-      if (error.response?.status === 401) {
-        localStorage.removeItem('token');
-        navigate('/admin/login');
-      } else {
-        const errorMessage = error.response?.data?.message || 'فشل في حفظ التقرير';
-        showMessage('error', errorMessage);
-      }
+      handleApiError(error, 'فشل في حفظ التقرير');
     } finally {
       setIsSubmitting(false);
     }
@@ -774,13 +802,7 @@ export default function Dashboard() {
       showMessage('success', `تم حذف تقرير سنة ${year} بنجاح`);
     } catch (error) {
       console.error('خطأ في حذف التقرير:', error);
-      
-      if (error.response?.status === 401) {
-        localStorage.removeItem('token');
-        navigate('/admin/login');
-      } else {
-        showMessage('error', 'فشل في حذف التقرير');
-      }
+      handleApiError(error, 'فشل في حذف التقرير');
     }
   };
 
@@ -1061,9 +1083,9 @@ export default function Dashboard() {
                     <input
                       type="text"
                       placeholder="مثال: فحص عام"
-                      value={newService.title}
+                      value={newService.name}
                       onChange={(e) =>
-                        setNewService((prev) => ({ ...prev, title: e.target.value }))
+                        setNewService((prev) => ({ ...prev, name: e.target.value }))
                       }
                       className="w-full border border-gray-300 p-3 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#062b2d]"
                       required
@@ -1083,6 +1105,26 @@ export default function Dashboard() {
                       className="w-full border border-gray-300 p-3 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#062b2d] h-24 resize-none"
                       required
                     />
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      القسم الطبي
+                    </label>
+                    <select
+                      value={newService.categoryId}
+                      onChange={(e) =>
+                        setNewService((prev) => ({ ...prev, categoryId: e.target.value }))
+                      }
+                      className="w-full border border-gray-300 p-3 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#062b2d]"
+                    >
+                      <option value="">اختر القسم (اختياري - سيتم إنشاء قسم عام)</option>
+                      {categories.map((category) => (
+                        <option key={category._id} value={category._id}>
+                          {category.name}
+                        </option>
+                      ))}
+                    </select>
                   </div>
                 </div>
 
@@ -1112,21 +1154,27 @@ export default function Dashboard() {
               {services.map((service) => (
                 <div key={service._id} className="bg-white rounded-lg shadow overflow-hidden">
                   <div className="p-6">
-                    <h4 className="font-bold text-lg mb-2 text-[#062b2d]">{service.title}</h4>
-                    <p className="text-gray-600 mb-4">{service.description}</p>
+                    <h4 className="font-bold text-lg mb-2 text-[#062b2d]">{service.name || service.title}</h4>
+                    <p className="text-gray-600 mb-2">{service.description}</p>
+                    {service.categoryId && (
+                      <p className="text-sm text-gray-500 mb-4">
+                        القسم: {typeof service.categoryId === 'object' ? service.categoryId.name : 'غير محدد'}
+                      </p>
+                    )}
 
                     {editingServiceId === service._id ? (
                       <div className="space-y-3">
                         <input
                           type="text"
-                          value={updatedService.title}
+                          value={updatedService.name}
                           onChange={(e) =>
                             setUpdatedService((prev) => ({
                               ...prev,
-                              title: e.target.value,
+                              name: e.target.value,
                             }))
                           }
                           className="w-full border p-2 rounded"
+                          placeholder="اسم الخدمة"
                         />
                         <textarea
                           value={updatedService.description}
@@ -1137,7 +1185,25 @@ export default function Dashboard() {
                             }))
                           }
                           className="w-full border p-2 rounded h-20 resize-none"
+                          placeholder="وصف الخدمة"
                         />
+                        <select
+                          value={updatedService.categoryId}
+                          onChange={(e) =>
+                            setUpdatedService((prev) => ({
+                              ...prev,
+                              categoryId: e.target.value,
+                            }))
+                          }
+                          className="w-full border p-2 rounded"
+                        >
+                          <option value="">بدون قسم محدد</option>
+                          {categories.map((category) => (
+                            <option key={category._id} value={category._id}>
+                              {category.name}
+                            </option>
+                          ))}
+                        </select>
                         <div className="flex gap-2">
                           <button
                             onClick={() => handleUpdateService(service._id)}
