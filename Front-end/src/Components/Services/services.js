@@ -13,7 +13,6 @@ import {
   FaTooth,
   FaSpinner,
   FaExclamationTriangle,
-  FaChevronRight,
   FaHeart,
   FaArrowLeft
 } from 'react-icons/fa';
