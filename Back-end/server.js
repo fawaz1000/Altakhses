@@ -80,8 +80,9 @@ app.use((req, res, next) => {
   next();
 });
 
-// ربط المسارات
-app.use('/api/admin', authRoutes);
+// ربط المسارات - 🔧 تصحيح مهم: تغيير auth من /api/admin إلى /api/auth
+app.use('/api/auth', authRoutes);        // 🔧 المسار الصحيح للمصادقة
+app.use('/api/admin', authRoutes);       // 🔧 إبقاء المسار القديم للتوافق
 app.use('/api/media', mediaRoutes);
 app.use('/api/reports', reportRoutes);
 app.use('/api/services', serviceRoutes);
@@ -95,7 +96,8 @@ app.get('/', (req, res) => {
     status: 'running',
     timestamp: new Date().toISOString(),
     endpoints: {
-      auth: '/api/admin',
+      auth: '/api/auth',
+      admin: '/api/admin', // للتوافق مع الأكواد القديمة
       media: '/api/media',
       reports: '/api/reports',
       services: '/api/services',
@@ -119,6 +121,8 @@ app.get('/api/test', (req, res) => {
       name: mongoose.connection.db?.databaseName || 'unknown'
     },
     endpoints: [
+      'GET /api/auth/profile',
+      'POST /api/auth/login',
       'GET /api/admin/profile',
       'POST /api/admin/login',
       'GET /api/media',
@@ -251,7 +255,9 @@ app.use('*', (req, res) => {
     availableRoutes: [
       'GET /',
       'GET /api/test',
+      'POST /api/auth/login',
       'POST /api/admin/login',
+      'GET /api/auth/profile',
       'GET /api/admin/profile',
       'GET /api/media',
       'GET /api/reports',
@@ -312,6 +318,7 @@ const startServer = async () => {
       console.log(`🌐 Server running on port ${PORT}`);
       console.log(`📡 API Base URL: http://localhost:${PORT}`);
       console.log(`🧪 Test endpoint: http://localhost:${PORT}/api/test`);
+      console.log(`🔑 Auth Login: http://localhost:${PORT}/api/auth/login`);
       console.log(`🔑 Admin Login: http://localhost:${PORT}/api/admin/login`);
       console.log(`📁 Media API: http://localhost:${PORT}/api/media`);
       console.log(`📊 Reports API: http://localhost:${PORT}/api/reports`);

@@ -1,4 +1,4 @@
-// Front-end/src/Pages/Dashboard.js - مُحدث لحل مشاكل المصادقة والإضافة
+// Front-end/src/Pages/Dashboard.js - الملف الصحيح والمكتمل
 import React, { useEffect, useState, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { jwtDecode } from 'jwt-decode';
@@ -66,7 +66,7 @@ export default function Dashboard() {
     categoryId: '',
   });
 
-  // إضافة states للأقسام
+  // states للأقسام
   const [newCategory, setNewCategory] = useState({
     name: '',
     description: '',
@@ -101,25 +101,24 @@ export default function Dashboard() {
     setTimeout(() => setMessage({ type: '', text: '' }), 5000);
   };
 
-  // دالة للحصول على التوكن مع التحقق المحسن
+  // دالة للحصول على التوكن
   const getAuthToken = () => {
     const token = localStorage.getItem('token');
     if (!token) {
-      console.log('❌ No token found in localStorage');
+      console.log('❌ No token found');
       showMessage('error', 'انتهت جلسة المستخدم، يرجى تسجيل الدخول مرة أخرى');
       navigate('/admin/login');
       return null;
     }
 
     try {
-      // التحقق من صحة التوكن وانتهاء صلاحيته
       const decoded = jwtDecode(token);
       const currentTime = Date.now() / 1000;
 
       if (decoded.exp < currentTime) {
         console.log('❌ Token expired');
         localStorage.removeItem('token');
-        showMessage('error', 'انتهت صلاحية الجلسة، يرجى تسجيل الدخول مرة أخرى');
+        showMessage('error', 'انتهت صلاحية الجلسة');
         navigate('/admin/login');
         return null;
       }
@@ -142,7 +141,7 @@ export default function Dashboard() {
     }
   };
 
-  // دالة للحصول على headers المطلوبة
+  // دالة للحصول على headers
   const getAuthHeaders = () => {
     const token = getAuthToken();
     if (!token) return null;
@@ -153,7 +152,7 @@ export default function Dashboard() {
     };
   };
 
-  // دالة للتعامل مع أخطاء API
+  // معالجة أخطاء API
   const handleApiError = (error, defaultMessage = 'حدث خطأ غير متوقع') => {
     console.error('API Error:', error);
 
@@ -177,14 +176,13 @@ export default function Dashboard() {
     showMessage('error', errorMessage);
   };
 
-  // التحقق من المصادقة عند تحميل المكون
+  // التحقق من المصادقة
   useEffect(() => {
     const verifyAuth = async () => {
       const token = getAuthToken();
       if (!token) return;
 
       try {
-        // التحقق من صحة التوكن مع الخادم
         const response = await axios.get(`${API_BASE}/api/admin/verify`, {
           headers: { Authorization: `Bearer ${token}` },
           withCredentials: true,
@@ -207,7 +205,7 @@ export default function Dashboard() {
     verifyAuth();
   }, [navigate]);
 
-  // جلب جميع السنوات المتاحة
+  // جلب السنوات المتاحة
   const fetchAvailableYears = useCallback(async () => {
     const headers = getAuthHeaders();
     if (!headers) return;
@@ -260,18 +258,21 @@ export default function Dashboard() {
     }
   }, [navigate]);
 
+  // جلب البيانات حسب القسم
   const fetchCurrentCategory = useCallback(async () => {
-    if (!userInfo) return; // انتظار التحقق من المصادقة
+    if (!userInfo) return;
     
     setLoading(true);
     const headers = getAuthHeaders();
-    if (!headers) return;
+    if (!headers) {
+      setLoading(false);
+      return;
+    }
 
     try {
       console.log(`🔄 Fetching data for category: ${category}`);
       
       if (category === 'reports') {
-        // جلب بيانات السنة المحددة
         const { data } = await axios.get(`${API_BASE}/api/reports`, {
           headers,
           withCredentials: true,
@@ -283,33 +284,28 @@ export default function Dashboard() {
         setMediaItems([]);
         setServices([]);
         setCategories([]);
-        
-        // جلب السنوات المتاحة
         await fetchAvailableYears();
+        
       } else if (category === 'services') {
-        // جلب الخدمات
         const { data } = await axios.get(`${API_BASE}/api/services`, {
           headers,
           withCredentials: true,
           timeout: 10000
         });
         
-        // التعامل مع الاستجابة الجديدة
         const servicesData = data.success ? data.data : data;
-        setServices(servicesData || []);
+        setServices(Array.isArray(servicesData) ? servicesData : []);
         setMediaItems([]);
         setReportMetrics([]);
-        
-        // جلب الأقسام أيضاً لاستخدامها في النماذج
         await fetchCategories();
+        
       } else if (category === 'categories') {
-        // جلب الأقسام
         await fetchCategories();
         setMediaItems([]);
         setReportMetrics([]);
         setServices([]);
+        
       } else {
-        // جلب الوسائط
         const { data } = await axios.get(`${API_BASE}/api/media`, {
           headers,
           withCredentials: true,
@@ -329,7 +325,6 @@ export default function Dashboard() {
       setReportMetrics([]);
       setServices([]);
       setCategories([]);
-      
       handleApiError(error, 'خطأ في جلب البيانات');
     } finally {
       setLoading(false);
@@ -340,7 +335,7 @@ export default function Dashboard() {
     fetchCurrentCategory();
   }, [fetchCurrentCategory]);
 
-  // دالة تسجيل الخروج
+  // تسجيل الخروج
   const handleLogout = async () => {
     try {
       const headers = getAuthHeaders();
@@ -389,12 +384,13 @@ export default function Dashboard() {
       
       console.log('Category add response:', response.data);
       
-      if (response.data.success || response.data._id) {
-        setCategories([response.data, ...categories]);
+      const categoryData = response.data.success ? response.data : response.data;
+      if (categoryData._id || categoryData.success !== false) {
+        setCategories([categoryData, ...categories]);
         setNewCategory({ name: '', description: '', icon: 'FaStethoscope' });
-        showMessage('success', response.data.message || 'تم إضافة القسم بنجاح');
+        showMessage('success', categoryData.message || 'تم إضافة القسم بنجاح');
       } else {
-        throw new Error(response.data.error || 'فشل في إضافة القسم');
+        throw new Error(categoryData.error || 'فشل في إضافة القسم');
       }
     } catch (error) {
       console.error('خطأ في إضافة القسم:', error);
@@ -435,14 +431,13 @@ export default function Dashboard() {
         }
       );
       
-      console.log('Category update response:', response.data);
-      
-      if (response.data.success || response.data._id) {
-        setCategories(categories.map((c) => (c._id === id ? response.data : c)));
+      const categoryData = response.data.success ? response.data : response.data;
+      if (categoryData._id || categoryData.success !== false) {
+        setCategories(categories.map((c) => (c._id === id ? categoryData : c)));
         setEditingCategoryId(null);
-        showMessage('success', response.data.message || 'تم تحديث القسم بنجاح');
+        showMessage('success', categoryData.message || 'تم تحديث القسم بنجاح');
       } else {
-        throw new Error(response.data.error || 'فشل في تحديث القسم');
+        throw new Error(categoryData.error || 'فشل في تحديث القسم');
       }
     } catch (error) {
       console.error('خطأ في تحديث القسم:', error);
@@ -458,14 +453,11 @@ export default function Dashboard() {
     if (!headers) return;
 
     try {
-      console.log('Deleting category:', id);
       const response = await axios.delete(`${API_BASE}/api/categories/${id}`, {
         headers,
         withCredentials: true,
         timeout: 10000
       });
-      
-      console.log('Category delete response:', response.data);
       
       if (response.data.success || response.status === 200) {
         setCategories(categories.filter((c) => c._id !== id));
@@ -497,7 +489,6 @@ export default function Dashboard() {
     }
 
     try {
-      console.log('Adding service:', newService);
       const response = await axios.post(
         `${API_BASE}/api/services`,
         newService,
@@ -507,8 +498,6 @@ export default function Dashboard() {
           timeout: 10000
         }
       );
-      
-      console.log('Service add response:', response.data);
       
       if (response.data.success) {
         setServices([response.data.data, ...services]);
@@ -549,7 +538,6 @@ export default function Dashboard() {
     if (!headers) return;
 
     try {
-      console.log('Updating service:', id, updatedService);
       const response = await axios.put(
         `${API_BASE}/api/services/${id}`,
         updatedService,
@@ -559,8 +547,6 @@ export default function Dashboard() {
           timeout: 10000
         }
       );
-      
-      console.log('Service update response:', response.data);
       
       if (response.data.success) {
         setServices(services.map((s) => (s._id === id ? response.data.data : s)));
@@ -587,14 +573,11 @@ export default function Dashboard() {
     if (!headers) return;
 
     try {
-      console.log('Deleting service:', id);
       const response = await axios.delete(`${API_BASE}/api/services/${id}`, {
         headers,
         withCredentials: true,
         timeout: 10000
       });
-      
-      console.log('Service delete response:', response.data);
       
       if (response.data.success || response.status === 200) {
         setServices(services.filter((s) => s._id !== id));
@@ -608,7 +591,7 @@ export default function Dashboard() {
     }
   };
 
-  // باقي الدوال (handleAdd, handleEdit, handleUpdate, handleDelete للوسائط)
+  // دوال الوسائط
   const handleAdd = async (e) => {
     e.preventDefault();
     if (isSubmitting) return;
@@ -638,7 +621,7 @@ export default function Dashboard() {
           'Content-Type': 'multipart/form-data'
         },
         withCredentials: true,
-        timeout: 30000 // وقت أطول للرفع
+        timeout: 30000
       });
       
       setMediaItems([data, ...mediaItems]);
@@ -700,11 +683,11 @@ export default function Dashboard() {
     }
   };
 
+  // دوال التقارير
   const handleSaveReports = async (e) => {
     e.preventDefault();
     if (isSubmitting) return;
 
-    // التحقق من صحة البيانات
     const requiredFields = ['exp', 'doctors', 'rooms', 'operations', 'visitors', 'newVisitors'];
     const emptyFields = requiredFields.filter(field => !newMetric[field] || newMetric[field] === '');
     
@@ -747,11 +730,8 @@ export default function Dashboard() {
       
       setReportMetrics(data.metrics || []);
       setSelectedYear(parseInt(newMetric.year));
-      
-      // إعادة تحميل السنوات المتاحة
       await fetchAvailableYears();
       
-      // إعادة تعيين النموذج
       setNewMetric({
         year: new Date().getFullYear(),
         exp: '',
@@ -771,12 +751,10 @@ export default function Dashboard() {
     }
   };
 
-  // تغيير السنة المحددة
   const handleYearChange = (year) => {
     setSelectedYear(year);
   };
 
-  // حذف تقرير سنة معينة
   const handleDeleteYear = async (year) => {
     if (!window.confirm(`هل أنت متأكد من حذف تقرير سنة ${year}؟`)) return;
     
@@ -790,10 +768,8 @@ export default function Dashboard() {
         timeout: 10000
       });
       
-      // إعادة تحميل البيانات
       await fetchAvailableYears();
       
-      // تغيير السنة المحددة إلى السنة الحالية إذا تم حذف السنة المحددة
       if (selectedYear === year) {
         setSelectedYear(new Date().getFullYear());
         setReportMetrics([]);
@@ -1252,7 +1228,6 @@ export default function Dashboard() {
             <div className="flex items-center justify-between mb-6">
               <h3 className="text-xl font-semibold text-[#062b2d]">أبرز الأرقام</h3>
               
-              {/* قائمة السنوات المتاحة */}
               {availableYears.length > 0 && (
                 <div className="flex items-center gap-4">
                   <label className="text-sm font-medium text-gray-700">عرض بيانات سنة:</label>
@@ -1277,7 +1252,6 @@ export default function Dashboard() {
               </h4>
               
               <form onSubmit={handleSaveReports} className="space-y-6">
-                {/* حقل السنة */}
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-2">
@@ -1299,7 +1273,6 @@ export default function Dashboard() {
                   </div>
                 </div>
 
-                {/* حقول الإحصائيات */}
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
                   {[
                     { field: 'exp', label: 'سنوات خبرة' },
@@ -1349,7 +1322,6 @@ export default function Dashboard() {
               </form>
             </div>
 
-            {/* عرض التقارير الحالية */}
             {reportMetrics.length > 0 && (
               <div className="bg-white p-6 rounded-lg shadow">
                 <div className="flex items-center justify-between mb-6">
@@ -1382,7 +1354,6 @@ export default function Dashboard() {
               </div>
             )}
 
-            {/* قائمة جميع السنوات المتاحة */}
             {availableYears.length > 0 && (
               <div className="mt-8 bg-white p-6 rounded-lg shadow">
                 <h4 className="text-lg font-semibold mb-4 text-[#062b2d]">

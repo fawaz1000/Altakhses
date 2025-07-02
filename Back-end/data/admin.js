@@ -1,8 +1,17 @@
-// backend/data/admin.js
+// Back-end/data/admin.js - بيانات الأدمن الثابت
 const bcrypt = require('bcryptjs');
 
-module.exports = {
+// بيانات الأدمن الثابت
+const adminStatic = {
   username: 'fawaz',
-  // كلمة المرور الأصلية: 1234567890
-  password: bcrypt.hashSync('1234567890', 10)
+  // كلمة المرور: 1234567890 (مُشفرة)
+  password: bcrypt.hashSync('1234567890', 10),
+  role: 'admin'
 };
+
+console.log('📋 Admin credentials loaded:');
+console.log('   Username:', adminStatic.username);
+console.log('   Password hash:', adminStatic.password.substring(0, 20) + '...');
+console.log('   Role:', adminStatic.role);
+
+module.exports = adminStatic;
