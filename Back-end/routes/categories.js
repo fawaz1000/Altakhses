@@ -1,24 +1,18 @@
-// Back-end/routes/categories.js - مُحدث لحل مشاكل الإضافة
+// Back-end/routes/categories.js - مُصحح ومُحسن
 const express = require('express');
 const router = express.Router();
 const Category = require('../Models/Category');
-// 🔧 تصحيح الاستيراد
 const authenticateToken = require('../Middleware/authMiddleware');
 const { requireAdmin } = require('../Middleware/authMiddleware');
 
 // إضافة middleware للـ CORS والـ logging
 router.use((req, res, next) => {
-  // إضافة headers للـ CORS
   res.header('Access-Control-Allow-Origin', process.env.CORS_ORIGIN || 'http://localhost:3000');
   res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
   res.header('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, Authorization');
   res.header('Access-Control-Allow-Credentials', 'true');
   
-  // تسجيل الطلبات
   console.log(`[${new Date().toISOString()}] ${req.method} ${req.originalUrl}`);
-  console.log('Request body:', req.body);
-  console.log('Request headers:', req.headers);
-  
   next();
 });
 
@@ -32,7 +26,9 @@ router.get('/', async (req, res) => {
   try {
     console.log('GET /api/categories - Fetching categories...');
     
-    let categories = await Category.find({ isActive: true }).sort({ order: 1, createdAt: -1 });
+    const categories = await Category.find({ isActive: true })
+      .sort({ order: 1, createdAt: -1 })
+      .lean(); // استخدام lean للحصول على plain objects
     
     console.log(`Found ${categories.length} categories from database`);
     
@@ -45,41 +41,71 @@ router.get('/', async (req, res) => {
           name: 'طب الأسنان',
           description: 'قسم طب الأسنان يقدم خدمات شاملة للعناية بصحة الفم والأسنان',
           icon: 'FaTooth',
-          order: 1
+          order: 1,
+          isActive: true
         },
         {
           name: 'طب العيون',
           description: 'قسم طب العيون متخصص في تشخيص وعلاج جميع أمراض العين',
           icon: 'FaEye',
-          order: 2
+          order: 2,
+          isActive: true
         },
         {
           name: 'طب الأطفال',
           description: 'قسم طب الأطفال يهتم بصحة الأطفال من الولادة حتى المراهقة',
           icon: 'FaBaby',
-          order: 3
+          order: 3,
+          isActive: true
         },
         {
           name: 'الطب الباطني',
           description: 'قسم الطب الباطني يقدم الرعاية الطبية الشاملة للبالغين',
           icon: 'FaStethoscope',
-          order: 4
+          order: 4,
+          isActive: true
+        },
+        {
+          name: 'جراحة العظام',
+          description: 'قسم جراحة العظام متخصص في علاج إصابات وأمراض الجهاز الحركي',
+          icon: 'GiBrokenBone',
+          order: 5,
+          isActive: true
+        },
+        {
+          name: 'النساء والولادة',
+          description: 'قسم النساء والولادة يقدم رعاية شاملة لصحة المرأة والحمل',
+          icon: 'MdPregnantWoman',
+          order: 6,
+          isActive: true
         }
       ];
 
       try {
         const createdCategories = await Category.insertMany(defaultCategories);
-        categories = createdCategories;
-        console.log(`Created ${categories.length} default categories`);
+        console.log(`Created ${createdCategories.length} default categories`);
+        
+        // إرجاع الأقسام المُنشأة حديثاً
+        return res.status(200).json(createdCategories.map(cat => ({
+          _id: cat._id,
+          name: cat.name,
+          title: cat.title || cat.name,
+          description: cat.description,
+          icon: cat.icon,
+          slug: cat.slug,
+          isActive: cat.isActive,
+          order: cat.order,
+          createdAt: cat.createdAt,
+          updatedAt: cat.updatedAt
+        })));
+        
       } catch (insertError) {
         console.error('Error creating default categories:', insertError);
-        categories = defaultCategories.map((cat, index) => ({
-          _id: `default_${index}`,
-          ...cat,
-          createdAt: new Date(),
-          updatedAt: new Date(),
-          isActive: true
-        }));
+        return res.status(500).json({
+          error: 'خطأ في إنشاء الأقسام الافتراضية',
+          message: insertError.message,
+          success: false
+        });
       }
     }
     
@@ -90,7 +116,7 @@ router.get('/', async (req, res) => {
       title: category.title || category.name || 'قسم طبي',
       description: category.description || 'وصف القسم الطبي',
       icon: category.icon || 'FaStethoscope',
-      slug: category.slug || category.name?.replace(/\s+/g, '-').toLowerCase(),
+      slug: category.slug || (category.name?.replace(/\s+/g, '-').toLowerCase()),
       isActive: category.isActive !== false,
       order: category.order || 0,
       createdAt: category.createdAt,
@@ -98,7 +124,6 @@ router.get('/', async (req, res) => {
     }));
     
     console.log(`Sending ${processedCategories.length} processed categories`);
-    
     res.status(200).json(processedCategories);
     
   } catch (error) {
@@ -116,7 +141,7 @@ router.get('/:id', async (req, res) => {
   try {
     console.log(`GET /api/categories/${req.params.id}`);
     
-    const category = await Category.findById(req.params.id);
+    const category = await Category.findById(req.params.id).lean();
     
     if (!category) {
       return res.status(404).json({ 
@@ -132,7 +157,7 @@ router.get('/:id', async (req, res) => {
       title: category.title || category.name || 'قسم طبي',
       description: category.description || 'وصف القسم الطبي',
       icon: category.icon || 'FaStethoscope',
-      slug: category.slug || category.name?.replace(/\s+/g, '-').toLowerCase(),
+      slug: category.slug || (category.name?.replace(/\s+/g, '-').toLowerCase()),
       isActive: category.isActive !== false,
       order: category.order || 0,
       createdAt: category.createdAt,
@@ -164,7 +189,6 @@ router.post('/', authenticateToken, requireAdmin, async (req, res) => {
   try {
     console.log('POST /api/categories - Creating new category');
     console.log('Request body:', JSON.stringify(req.body, null, 2));
-    console.log('User info:', req.user);
     
     const { name, title, description, icon, order } = req.body;
     
@@ -217,33 +241,30 @@ router.post('/', authenticateToken, requireAdmin, async (req, res) => {
     console.log('Creating category with data:', JSON.stringify(categoryData, null, 2));
     
     const category = new Category(categoryData);
-    await category.save();
+    const savedCategory = await category.save();
     
-    console.log('✅ Category created successfully:', category._id);
+    console.log('✅ Category created successfully:', savedCategory._id);
     
     // معالجة البيانات قبل الإرسال
     const responseCategory = {
-      _id: category._id,
-      name: category.name,
-      title: category.title,
-      description: category.description,
-      icon: category.icon,
-      slug: category.slug,
-      isActive: category.isActive,
-      order: category.order,
-      createdAt: category.createdAt,
-      updatedAt: category.updatedAt
-    };
-    
-    res.status(201).json({
-      ...responseCategory,
+      _id: savedCategory._id,
+      name: savedCategory.name,
+      title: savedCategory.title,
+      description: savedCategory.description,
+      icon: savedCategory.icon,
+      slug: savedCategory.slug,
+      isActive: savedCategory.isActive,
+      order: savedCategory.order,
+      createdAt: savedCategory.createdAt,
+      updatedAt: savedCategory.updatedAt,
       success: true,
       message: 'تم إنشاء القسم بنجاح'
-    });
+    };
+    
+    res.status(201).json(responseCategory);
     
   } catch (error) {
     console.error('❌ Error creating category:', error);
-    console.error('Error stack:', error.stack);
     
     if (error.code === 11000) {
       const field = Object.keys(error.keyPattern || {})[0];
@@ -348,14 +369,12 @@ router.put('/:id', authenticateToken, requireAdmin, async (req, res) => {
       isActive: category.isActive,
       order: category.order,
       createdAt: category.createdAt,
-      updatedAt: category.updatedAt
-    };
-    
-    res.status(200).json({
-      ...responseCategory,
+      updatedAt: category.updatedAt,
       success: true,
       message: 'تم تحديث القسم بنجاح'
-    });
+    };
+    
+    res.status(200).json(responseCategory);
     
   } catch (error) {
     console.error('❌ Error updating category:', error);

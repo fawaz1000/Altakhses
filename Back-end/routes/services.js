@@ -1,9 +1,8 @@
-// Back-end/routes/services.js - مُحدث ومُصحح
+// Back-end/routes/services.js - مُصحح ومُحسن
 const express = require('express');
 const router = express.Router();
 const Service = require('../Models/Service');
 const Category = require('../Models/Category');
-// 🔧 تصحيح الاستيراد
 const authenticateToken = require('../Middleware/authMiddleware');
 const { requireAdmin } = require('../Middleware/authMiddleware');
 
@@ -14,9 +13,7 @@ router.use((req, res, next) => {
   res.header('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, Authorization');
   res.header('Access-Control-Allow-Credentials', 'true');
   
-  console.log(`[${new Date().toISOString()}] ${req.method} ${req.originalUrl}`);
-  console.log('Request body:', req.body);
-  
+  console.log('[' + new Date().toISOString() + '] ' + req.method + ' ' + req.originalUrl);
   next();
 });
 
@@ -40,17 +37,21 @@ router.get('/', async (req, res) => {
     }
     
     // تصفية حسب اسم القسم إذا تم تمرير category
-    if (category) {
-      const foundCategory = await Category.findOne({ 
-        $or: [
-          { name: category }, 
-          { slug: category },
-          { _id: category }
-        ] 
-      });
-      if (foundCategory) {
-        query.categoryId = foundCategory._id;
-        console.log('Filtering by category name:', category, '-> ID:', foundCategory._id);
+    if (category && !categoryId) {
+      try {
+        const foundCategory = await Category.findOne({ 
+          $or: [
+            { name: { $regex: new RegExp(category, 'i') } }, 
+            { slug: category },
+            { _id: category }
+          ] 
+        });
+        if (foundCategory) {
+          query.categoryId = foundCategory._id;
+          console.log('Filtering by category name:', category, '-> ID:', foundCategory._id);
+        }
+      } catch (error) {
+        console.error('Error finding category:', error);
       }
     }
     
@@ -61,8 +62,8 @@ router.get('/', async (req, res) => {
       servicesQuery = servicesQuery.populate('categoryId', 'name description icon slug');
     }
     
-    const services = await servicesQuery;
-    console.log(`Found ${services.length} services`);
+    const services = await servicesQuery.lean();
+    console.log('Found ' + services.length + ' services');
     
     res.json({
       success: true,
@@ -82,9 +83,11 @@ router.get('/', async (req, res) => {
 // جلب خدمة واحدة (مفتوح للجميع)
 router.get('/:id', async (req, res) => {
   try {
-    console.log(`GET /api/services/${req.params.id}`);
+    console.log('GET /api/services/' + req.params.id);
     
-    const service = await Service.findById(req.params.id).populate('categoryId', 'name description icon slug');
+    const service = await Service.findById(req.params.id)
+      .populate('categoryId', 'name description icon slug')
+      .lean();
     
     if (!service) {
       return res.status(404).json({ 
@@ -121,7 +124,6 @@ router.post('/', authenticateToken, requireAdmin, async (req, res) => {
   try {
     console.log('POST /api/services - Creating new service');
     console.log('Request body:', JSON.stringify(req.body, null, 2));
-    console.log('User info:', req.user);
     
     const { name, title, description, categoryId, price, duration } = req.body;
     
@@ -162,7 +164,9 @@ router.post('/', authenticateToken, requireAdmin, async (req, res) => {
         generalCategory = new Category({
           name: 'خدمات عامة',
           description: 'خدمات طبية عامة ومتنوعة',
-          icon: 'FaStethoscope'
+          icon: 'FaStethoscope',
+          order: 999,
+          isActive: true
         });
         await generalCategory.save();
         console.log('✅ General category created:', generalCategory._id);
@@ -185,7 +189,7 @@ router.post('/', authenticateToken, requireAdmin, async (req, res) => {
     
     // التحقق من عدم وجود خدمة بنفس الاسم في نفس القسم
     const existingService = await Service.findOne({ 
-      name: { $regex: new RegExp(`^${name.trim()}$`, 'i') },
+      name: { $regex: new RegExp('^' + name.trim() + '$', 'i') },
       categoryId: finalCategoryId,
       isActive: true
     });
@@ -205,32 +209,32 @@ router.post('/', authenticateToken, requireAdmin, async (req, res) => {
       description: description.trim(),
       categoryId: finalCategoryId,
       price: price ? parseFloat(price) : undefined,
-      duration: duration?.trim() || undefined,
+      duration: duration && duration.trim() ? duration.trim() : undefined,
       isActive: true,
       metadata: {
-        createdBy: req.user?.id || req.user?.username
+        createdBy: req.user && req.user.id ? req.user.id : req.user.username
       }
     };
 
     console.log('Creating service with data:', JSON.stringify(serviceData, null, 2));
     
     const service = new Service(serviceData);
-    await service.save();
+    const savedService = await service.save();
     
-    console.log('✅ Service created successfully:', service._id);
+    console.log('✅ Service created successfully:', savedService._id);
     
     // جلب الخدمة مع معلومات القسم
-    const savedService = await Service.findById(service._id).populate('categoryId', 'name description icon slug');
+    const populatedService = await Service.findById(savedService._id)
+      .populate('categoryId', 'name description icon slug');
     
     res.status(201).json({
       success: true,
-      data: savedService,
+      data: populatedService,
       message: 'تم إنشاء الخدمة بنجاح'
     });
     
   } catch (error) {
     console.error('❌ Error creating service:', error);
-    console.error('Error stack:', error.stack);
     
     if (error.code === 11000) {
       return res.status(400).json({ 
@@ -259,7 +263,7 @@ router.post('/', authenticateToken, requireAdmin, async (req, res) => {
 // تحديث خدمة (محمي - للإدارة فقط)
 router.put('/:id', authenticateToken, requireAdmin, async (req, res) => {
   try {
-    console.log(`PUT /api/services/${req.params.id}`);
+    console.log('PUT /api/services/' + req.params.id);
     console.log('Request body:', req.body);
     
     const { name, title, description, categoryId, price, duration } = req.body;
@@ -294,7 +298,7 @@ router.put('/:id', authenticateToken, requireAdmin, async (req, res) => {
     const existingService = await Service.findOne({ 
       $and: [
         { _id: { $ne: req.params.id } },
-        { name: { $regex: new RegExp(`^${name.trim()}$`, 'i') } },
+        { name: { $regex: new RegExp('^' + name.trim() + '$', 'i') } },
         { categoryId: categoryId || undefined }
       ]
     });
@@ -311,9 +315,9 @@ router.put('/:id', authenticateToken, requireAdmin, async (req, res) => {
       title: (title || name).trim(),
       description: description.trim(),
       price: price ? parseFloat(price) : undefined,
-      duration: duration?.trim() || undefined,
+      duration: duration && duration.trim() ? duration.trim() : undefined,
       updatedAt: new Date(),
-      'metadata.updatedBy': req.user?.id || req.user?.username
+      'metadata.updatedBy': req.user && req.user.id ? req.user.id : req.user.username
     };
 
     // إضافة categoryId فقط إذا تم تمريره
@@ -389,7 +393,7 @@ router.put('/:id', authenticateToken, requireAdmin, async (req, res) => {
 // حذف خدمة (محمي - للإدارة فقط)
 router.delete('/:id', authenticateToken, requireAdmin, async (req, res) => {
   try {
-    console.log(`DELETE /api/services/${req.params.id}`);
+    console.log('DELETE /api/services/' + req.params.id);
     
     const service = await Service.findByIdAndDelete(req.params.id);
     
@@ -448,14 +452,17 @@ router.get('/stats/by-category', async (req, res) => {
         }
       },
       {
-        $unwind: '$category'
+        $unwind: {
+          path: '$category',
+          preserveNullAndEmptyArrays: true
+        }
       },
       {
         $project: {
           categoryId: '$_id',
-          categoryName: '$category.name',
-          categoryIcon: '$category.icon',
-          categorySlug: '$category.slug',
+          categoryName: { $ifNull: ['$category.name', 'خدمات عامة'] },
+          categoryIcon: { $ifNull: ['$category.icon', 'FaStethoscope'] },
+          categorySlug: { $ifNull: ['$category.slug', 'general'] },
           servicesCount: '$count',
           services: '$services'
         }
@@ -491,9 +498,9 @@ router.get('/search/:query', async (req, res) => {
         { title: { $regex: query, $options: 'i' } },
         { description: { $regex: query, $options: 'i' } }
       ]
-    }).populate('categoryId', 'name description icon slug').limit(20);
+    }).populate('categoryId', 'name description icon slug').limit(20).lean();
     
-    console.log(`Found ${services.length} services matching "${query}"`);
+    console.log('Found ' + services.length + ' services matching "' + query + '"');
     res.json({
       success: true,
       data: services,
