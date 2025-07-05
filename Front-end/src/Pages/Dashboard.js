@@ -16,10 +16,10 @@ import {
   FaSpinner,
   FaEye,
   FaDownload,
-  FaTimes,
   FaExclamationTriangle,
   FaCheckCircle
 } from 'react-icons/fa';
+import { API_BASE } from '../config';
 
 function Dashboard() {
   const navigate = useNavigate();
@@ -30,16 +30,16 @@ function Dashboard() {
   // States for Categories
   const [categories, setCategories] = useState([]);
   const [isAddingCategory, setIsAddingCategory] = useState(false);
-  const [newCategoryName, setNewCategoryName] = useState('');
+  const [newCategory, setNewCategory] = useState({ name: '', description: '' });
   const [editingCategory, setEditingCategory] = useState(null);
-  const [updatedCategoryName, setUpdatedCategoryName] = useState('');
+  const [updatedCategory, setUpdatedCategory] = useState({ name: '', description: '' });
   
   // States for Services
   const [services, setServices] = useState([]);
   const [isAddingService, setIsAddingService] = useState(false);
-  const [newService, setNewService] = useState({ name: '', description: '', category: '' });
+  const [newService, setNewService] = useState({ name: '', description: '', categoryId: '' });
   const [editingService, setEditingService] = useState(null);
-  const [updatedService, setUpdatedService] = useState({ name: '', description: '', category: '' });
+  const [updatedService, setUpdatedService] = useState({ name: '', description: '', categoryId: '' });
   
   // States for Doctors
   const [doctors, setDoctors] = useState([]);
@@ -51,16 +51,14 @@ function Dashboard() {
   // States for Media
   const [mediaItems, setMediaItems] = useState([]);
   const [isAddingMedia, setIsAddingMedia] = useState(false);
-  const [newMedia, setNewMedia] = useState({ title: '', type: 'image', file: null });
-  const [editingMedia, setEditingMedia] = useState(null);
-  const [updatedMedia, setUpdatedMedia] = useState({ title: '', type: 'image' });
+  const [newMedia, setNewMedia] = useState({ title: '', description: '', category: 'general', file: null });
   
   // States for Reports
   const [reports, setReports] = useState([]);
   const [isAddingReport, setIsAddingReport] = useState(false);
-  const [newReport, setNewReport] = useState({ year: '', content: '' });
+  const [newReport, setNewReport] = useState({ year: new Date().getFullYear(), metrics: [] });
   const [editingReport, setEditingReport] = useState(null);
-  const [updatedReport, setUpdatedReport] = useState({ year: '', content: '' });
+  const [updatedReport, setUpdatedReport] = useState({ year: '', metrics: [] });
   
   // Common states
   const [error, setError] = useState('');
@@ -68,12 +66,12 @@ function Dashboard() {
   const [actionLoading, setActionLoading] = useState(false);
 
   // Configure axios defaults
-  const axiosConfig = {
+  const getAxiosConfig = () => ({
     headers: {
       'Content-Type': 'application/json',
       'Authorization': `Bearer ${localStorage.getItem('token')}`
     }
-  };
+  });
 
   // Check authentication
   useEffect(() => {
@@ -102,9 +100,9 @@ function Dashboard() {
   // Fetch Categories
   const fetchCategories = useCallback(async () => {
     try {
-      const response = await axios.get('http://localhost:5050/api/categories', axiosConfig);
-      const categoriesData = response.data?.data || response.data || [];
-      setCategories(Array.isArray(categoriesData) ? categoriesData : []);
+      const response = await axios.get(`${API_BASE}/api/categories`, getAxiosConfig());
+      const categoriesData = Array.isArray(response.data) ? response.data : response.data?.data || [];
+      setCategories(categoriesData);
     } catch (error) {
       console.error('Error fetching categories:', error);
       setError('خطأ في جلب الأقسام الطبية');
@@ -114,9 +112,9 @@ function Dashboard() {
   // Fetch Services
   const fetchServices = useCallback(async () => {
     try {
-      const response = await axios.get('http://localhost:5050/api/services', axiosConfig);
-      const servicesData = response.data?.data || response.data || [];
-      setServices(Array.isArray(servicesData) ? servicesData : []);
+      const response = await axios.get(`${API_BASE}/api/services?populate=category`, getAxiosConfig());
+      const servicesData = Array.isArray(response.data) ? response.data : response.data?.data || [];
+      setServices(servicesData);
     } catch (error) {
       console.error('Error fetching services:', error);
       setError('خطأ في جلب الخدمات');
@@ -126,9 +124,9 @@ function Dashboard() {
   // Fetch Doctors
   const fetchDoctors = useCallback(async () => {
     try {
-      const response = await axios.get('http://localhost:5050/api/doctors', axiosConfig);
-      const doctorsData = response.data?.data || response.data || [];
-      setDoctors(Array.isArray(doctorsData) ? doctorsData : []);
+      const response = await axios.get(`${API_BASE}/api/doctors`, getAxiosConfig());
+      const doctorsData = Array.isArray(response.data) ? response.data : response.data?.data || [];
+      setDoctors(doctorsData);
     } catch (error) {
       console.error('Error fetching doctors:', error);
       setError('خطأ في جلب الأطباء');
@@ -138,9 +136,9 @@ function Dashboard() {
   // Fetch Media
   const fetchMedia = useCallback(async () => {
     try {
-      const response = await axios.get('http://localhost:5050/api/media', axiosConfig);
-      const mediaData = response.data?.data || response.data || [];
-      setMediaItems(Array.isArray(mediaData) ? mediaData : []);
+      const response = await axios.get(`${API_BASE}/api/media`, getAxiosConfig());
+      const mediaData = Array.isArray(response.data) ? response.data : response.data?.data || [];
+      setMediaItems(mediaData);
     } catch (error) {
       console.error('Error fetching media:', error);
       setError('خطأ في جلب الوسائط');
@@ -150,9 +148,9 @@ function Dashboard() {
   // Fetch Reports
   const fetchReports = useCallback(async () => {
     try {
-      const response = await axios.get('http://localhost:5050/api/reports', axiosConfig);
-      const reportsData = response.data?.data || response.data || [];
-      setReports(Array.isArray(reportsData) ? reportsData : []);
+      const response = await axios.get(`${API_BASE}/api/reports/all`, getAxiosConfig());
+      const reportsData = Array.isArray(response.data) ? response.data : response.data?.data || [];
+      setReports(reportsData);
     } catch (error) {
       console.error('Error fetching reports:', error);
       setError('خطأ في جلب التقارير');
@@ -185,6 +183,7 @@ function Dashboard() {
         fetchCategories();
         fetchServices();
         fetchDoctors();
+        fetchMedia();
         break;
     }
   }, [activeSection, userInfo, fetchCategories, fetchServices, fetchDoctors, fetchMedia, fetchReports]);
@@ -192,18 +191,16 @@ function Dashboard() {
   // Category Functions
   const addCategory = async (e) => {
     e.preventDefault();
-    if (!newCategoryName.trim()) return;
+    if (!newCategory.name.trim() || !newCategory.description.trim()) return;
 
     setActionLoading(true);
     try {
-      const response = await axios.post('http://localhost:5050/api/categories', 
-        { name: newCategoryName.trim() }, 
-        axiosConfig
-      );
+      const response = await axios.post(`${API_BASE}/api/categories`, newCategory, getAxiosConfig());
       
       if (response.data) {
-        setCategories(prev => [...prev, response.data.data || response.data]);
-        setNewCategoryName('');
+        const categoryData = response.data.data || response.data;
+        setCategories(prev => [...prev, categoryData]);
+        setNewCategory({ name: '', description: '' });
         setIsAddingCategory(false);
         setSuccess('تم إضافة القسم بنجاح');
       }
@@ -217,26 +214,25 @@ function Dashboard() {
 
   const updateCategory = async (e) => {
     e.preventDefault();
-    if (!updatedCategoryName.trim() || !editingCategory) return;
+    if (!updatedCategory.name.trim() || !editingCategory) return;
 
     setActionLoading(true);
     try {
       const response = await axios.put(
-        `http://localhost:5050/api/categories/${editingCategory._id}`,
-        { name: updatedCategoryName.trim() },
-        axiosConfig
+        `${API_BASE}/api/categories/${editingCategory._id}`,
+        updatedCategory,
+        getAxiosConfig()
       );
       
       if (response.data) {
+        const categoryData = response.data.data || response.data;
         setCategories(prev => 
           prev.map(cat => 
-            cat._id === editingCategory._id 
-              ? { ...cat, name: updatedCategoryName.trim() }
-              : cat
+            cat._id === editingCategory._id ? categoryData : cat
           )
         );
         setEditingCategory(null);
-        setUpdatedCategoryName('');
+        setUpdatedCategory({ name: '', description: '' });
         setSuccess('تم تحديث القسم بنجاح');
       }
     } catch (error) {
@@ -252,7 +248,7 @@ function Dashboard() {
 
     setActionLoading(true);
     try {
-      await axios.delete(`http://localhost:5050/api/categories/${categoryId}`, axiosConfig);
+      await axios.delete(`${API_BASE}/api/categories/${categoryId}`, getAxiosConfig());
       setCategories(prev => prev.filter(cat => cat._id !== categoryId));
       setSuccess('تم حذف القسم بنجاح');
     } catch (error) {
@@ -266,22 +262,16 @@ function Dashboard() {
   // Service Functions
   const addService = async (e) => {
     e.preventDefault();
-    if (!newService.name.trim() || !newService.category) return;
+    if (!newService.name.trim() || !newService.description.trim()) return;
 
     setActionLoading(true);
     try {
-      const response = await axios.post('http://localhost:5050/api/services', 
-        {
-          name: newService.name.trim(),
-          description: newService.description.trim(),
-          category: newService.category
-        }, 
-        axiosConfig
-      );
+      const response = await axios.post(`${API_BASE}/api/services`, newService, getAxiosConfig());
       
       if (response.data) {
-        setServices(prev => [...prev, response.data.data || response.data]);
-        setNewService({ name: '', description: '', category: '' });
+        const serviceData = response.data.data || response.data;
+        setServices(prev => [...prev, serviceData]);
+        setNewService({ name: '', description: '', categoryId: '' });
         setIsAddingService(false);
         setSuccess('تم إضافة الخدمة بنجاح');
       }
@@ -295,30 +285,25 @@ function Dashboard() {
 
   const updateService = async (e) => {
     e.preventDefault();
-    if (!updatedService.name.trim() || !updatedService.category || !editingService) return;
+    if (!updatedService.name.trim() || !editingService) return;
 
     setActionLoading(true);
     try {
       const response = await axios.put(
-        `http://localhost:5050/api/services/${editingService._id}`,
-        {
-          name: updatedService.name.trim(),
-          description: updatedService.description.trim(),
-          category: updatedService.category
-        },
-        axiosConfig
+        `${API_BASE}/api/services/${editingService._id}`,
+        updatedService,
+        getAxiosConfig()
       );
       
       if (response.data) {
+        const serviceData = response.data.data || response.data;
         setServices(prev => 
           prev.map(service => 
-            service._id === editingService._id 
-              ? { ...service, ...updatedService }
-              : service
+            service._id === editingService._id ? serviceData : service
           )
         );
         setEditingService(null);
-        setUpdatedService({ name: '', description: '', category: '' });
+        setUpdatedService({ name: '', description: '', categoryId: '' });
         setSuccess('تم تحديث الخدمة بنجاح');
       }
     } catch (error) {
@@ -334,7 +319,7 @@ function Dashboard() {
 
     setActionLoading(true);
     try {
-      await axios.delete(`http://localhost:5050/api/services/${serviceId}`, axiosConfig);
+      await axios.delete(`${API_BASE}/api/services/${serviceId}`, getAxiosConfig());
       setServices(prev => prev.filter(service => service._id !== serviceId));
       setSuccess('تم حذف الخدمة بنجاح');
     } catch (error) {
@@ -352,18 +337,11 @@ function Dashboard() {
 
     setActionLoading(true);
     try {
-      const response = await axios.post('http://localhost:5050/api/doctors', 
-        {
-          name: newDoctor.name.trim(),
-          specialty: newDoctor.specialty,
-          experience: newDoctor.experience.trim(),
-          image: newDoctor.image.trim()
-        }, 
-        axiosConfig
-      );
+      const response = await axios.post(`${API_BASE}/api/doctors`, newDoctor, getAxiosConfig());
       
       if (response.data) {
-        setDoctors(prev => [...prev, response.data.data || response.data]);
+        const doctorData = response.data.data || response.data;
+        setDoctors(prev => [...prev, doctorData]);
         setNewDoctor({ name: '', specialty: '', experience: '', image: '' });
         setIsAddingDoctor(false);
         setSuccess('تم إضافة الطبيب بنجاح');
@@ -383,22 +361,16 @@ function Dashboard() {
     setActionLoading(true);
     try {
       const response = await axios.put(
-        `http://localhost:5050/api/doctors/${editingDoctor._id}`,
-        {
-          name: updatedDoctor.name.trim(),
-          specialty: updatedDoctor.specialty,
-          experience: updatedDoctor.experience.trim(),
-          image: updatedDoctor.image.trim()
-        },
-        axiosConfig
+        `${API_BASE}/api/doctors/${editingDoctor._id}`,
+        updatedDoctor,
+        getAxiosConfig()
       );
       
       if (response.data) {
+        const doctorData = response.data.data || response.data;
         setDoctors(prev => 
           prev.map(doctor => 
-            doctor._id === editingDoctor._id 
-              ? { ...doctor, ...updatedDoctor }
-              : doctor
+            doctor._id === editingDoctor._id ? doctorData : doctor
           )
         );
         setEditingDoctor(null);
@@ -418,7 +390,7 @@ function Dashboard() {
 
     setActionLoading(true);
     try {
-      await axios.delete(`http://localhost:5050/api/doctors/${doctorId}`, axiosConfig);
+      await axios.delete(`${API_BASE}/api/doctors/${doctorId}`, getAxiosConfig());
       setDoctors(prev => prev.filter(doctor => doctor._id !== doctorId));
       setSuccess('تم حذف الطبيب بنجاح');
     } catch (error) {
@@ -437,11 +409,12 @@ function Dashboard() {
     setActionLoading(true);
     const formData = new FormData();
     formData.append('title', newMedia.title.trim());
-    formData.append('type', newMedia.type);
-    formData.append('file', newMedia.file);
+    formData.append('description', newMedia.description.trim());
+    formData.append('category', newMedia.category);
+    formData.append('media', newMedia.file);
 
     try {
-      const response = await axios.post('http://localhost:5050/api/media', formData, {
+      const response = await axios.post(`${API_BASE}/api/media`, formData, {
         headers: {
           'Content-Type': 'multipart/form-data',
           'Authorization': `Bearer ${localStorage.getItem('token')}`
@@ -449,8 +422,9 @@ function Dashboard() {
       });
       
       if (response.data) {
-        setMediaItems(prev => [...prev, response.data.data || response.data]);
-        setNewMedia({ title: '', type: 'image', file: null });
+        const mediaData = response.data.data || response.data;
+        setMediaItems(prev => [...prev, mediaData]);
+        setNewMedia({ title: '', description: '', category: 'general', file: null });
         setIsAddingMedia(false);
         setSuccess('تم رفع الوسائط بنجاح');
       }
@@ -467,7 +441,7 @@ function Dashboard() {
 
     setActionLoading(true);
     try {
-      await axios.delete(`http://localhost:5050/api/media/${mediaId}`, axiosConfig);
+      await axios.delete(`${API_BASE}/api/media/${mediaId}`, getAxiosConfig());
       setMediaItems(prev => prev.filter(media => media._id !== mediaId));
       setSuccess('تم حذف الوسائط بنجاح');
     } catch (error) {
@@ -481,21 +455,16 @@ function Dashboard() {
   // Report Functions
   const addReport = async (e) => {
     e.preventDefault();
-    if (!newReport.year.trim() || !newReport.content.trim()) return;
+    if (!newReport.year || !newReport.metrics.length) return;
 
     setActionLoading(true);
     try {
-      const response = await axios.post('http://localhost:5050/api/reports', 
-        {
-          year: newReport.year.trim(),
-          content: newReport.content.trim()
-        }, 
-        axiosConfig
-      );
+      const response = await axios.post(`${API_BASE}/api/reports`, newReport, getAxiosConfig());
       
       if (response.data) {
-        setReports(prev => [...prev, response.data.data || response.data]);
-        setNewReport({ year: '', content: '' });
+        const reportData = response.data.data || response.data;
+        setReports(prev => [...prev, reportData]);
+        setNewReport({ year: new Date().getFullYear(), metrics: [] });
         setIsAddingReport(false);
         setSuccess('تم إضافة التقرير بنجاح');
       }
@@ -509,29 +478,25 @@ function Dashboard() {
 
   const updateReport = async (e) => {
     e.preventDefault();
-    if (!updatedReport.year.trim() || !updatedReport.content.trim() || !editingReport) return;
+    if (!updatedReport.year || !updatedReport.metrics.length || !editingReport) return;
 
     setActionLoading(true);
     try {
-      const response = await axios.put(
-        `http://localhost:5050/api/reports/${editingReport._id}`,
-        {
-          year: updatedReport.year.trim(),
-          content: updatedReport.content.trim()
-        },
-        axiosConfig
+      const response = await axios.post(
+        `${API_BASE}/api/reports`,
+        updatedReport,
+        getAxiosConfig()
       );
       
       if (response.data) {
+        const reportData = response.data.data || response.data;
         setReports(prev => 
           prev.map(report => 
-            report._id === editingReport._id 
-              ? { ...report, ...updatedReport }
-              : report
+            report.year === editingReport.year ? reportData : report
           )
         );
         setEditingReport(null);
-        setUpdatedReport({ year: '', content: '' });
+        setUpdatedReport({ year: '', metrics: [] });
         setSuccess('تم تحديث التقرير بنجاح');
       }
     } catch (error) {
@@ -542,13 +507,13 @@ function Dashboard() {
     }
   };
 
-  const deleteReport = async (reportId) => {
+  const deleteReport = async (year) => {
     if (!window.confirm('هل أنت متأكد من حذف هذا التقرير؟')) return;
 
     setActionLoading(true);
     try {
-      await axios.delete(`http://localhost:5050/api/reports/${reportId}`, axiosConfig);
-      setReports(prev => prev.filter(report => report._id !== reportId));
+      await axios.delete(`${API_BASE}/api/reports/${year}`, getAxiosConfig());
+      setReports(prev => prev.filter(report => report.year !== year));
       setSuccess('تم حذف التقرير بنجاح');
     } catch (error) {
       console.error('Error deleting report:', error);
@@ -587,7 +552,7 @@ function Dashboard() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 flex">
+    <div className="min-h-screen bg-gray-50 flex rtl">
       {/* Sidebar */}
       <div className="w-64 bg-[#062b2d] text-white shadow-lg">
         <div className="p-6">
@@ -758,135 +723,23 @@ function Dashboard() {
                     </label>
                     <input
                       type="text"
-                      value={newCategoryName}
-                      onChange={(e) => setNewCategoryName(e.target.value)}
+                      value={newCategory.name}
+                      onChange={(e) => setNewCategory({...newCategory, name: e.target.value})}
                       className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                      rows="6"
-                      placeholder="أدخل محتوى التقرير"
+                      placeholder="أدخل اسم القسم"
                       required
                     />
                   </div>
-                  <div className="flex gap-2">
-                    <button
-                      type="submit"
-                      disabled={actionLoading}
-                      className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded disabled:opacity-50"
-                    >
-                      {actionLoading ? <FaSpinner className="animate-spin" /> : 'إضافة'}
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setIsAddingReport(false);
-                        setNewReport({ year: '', content: '' });
-                      }}
-                      className="bg-gray-600 hover:bg-gray-700 text-white px-4 py-2 rounded"
-                    >
-                      إلغاء
-                    </button>
-                  </div>
-                </form>
-              </div>
-            )}
-
-            {/* Reports Grid */}
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-              {reports.map((report) => (
-                <div key={report._id} className="bg-white p-6 rounded-lg shadow-md">
-                  {editingReport && editingReport._id === report._id ? (
-                    <form onSubmit={updateReport}>
-                      <div className="mb-4">
-                        <input
-                          type="text"
-                          value={updatedReport.year}
-                          onChange={(e) => setUpdatedReport({...updatedReport, year: e.target.value})}
-                          className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 mb-2"
-                          required
-                        />
-                        <textarea
-                          value={updatedReport.content}
-                          onChange={(e) => setUpdatedReport({...updatedReport, content: e.target.value})}
-                          className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                          rows="6"
-                          required
-                        />
-                      </div>
-                      <div className="flex gap-2">
-                        <button
-                          type="submit"
-                          disabled={actionLoading}
-                          className="bg-green-600 hover:bg-green-700 text-white px-3 py-1 rounded text-sm disabled:opacity-50"
-                        >
-                          {actionLoading ? <FaSpinner className="animate-spin" /> : 'حفظ'}
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setEditingReport(null);
-                            setUpdatedReport({ year: '', content: '' });
-                          }}
-                          className="bg-gray-600 hover:bg-gray-700 text-white px-3 py-1 rounded text-sm"
-                        >
-                          إلغاء
-                        </button>
-                      </div>
-                    </form>
-                  ) : (
-                    <>
-                      <h3 className="text-xl font-bold text-gray-800 mb-2">تقرير عام {report.year}</h3>
-                      <p className="text-gray-600 mb-4 line-clamp-3">{report.content}</p>
-                      <div className="flex gap-2">
-                        <button
-                          onClick={() => {
-                            setEditingReport(report);
-                            setUpdatedReport({
-                              year: report.year,
-                              content: report.content
-                            });
-                          }}
-                          className="bg-blue-600 hover:bg-blue-700 text-white px-3 py-1 rounded text-sm flex items-center"
-                        >
-                          <FaEdit className="ml-1" />
-                          تعديل
-                        </button>
-                        <button
-                          onClick={() => deleteReport(report._id)}
-                          disabled={actionLoading}
-                          className="bg-red-600 hover:bg-red-700 text-white px-3 py-1 rounded text-sm flex items-center disabled:opacity-50"
-                        >
-                          <FaTrash className="ml-1" />
-                          حذف
-                        </button>
-                        <button
-                          onClick={() => {
-                            const element = document.createElement('a');
-                            const file = new Blob([report.content], { type: 'text/plain' });
-                            element.href = URL.createObjectURL(file);
-                            element.download = `تقرير_${report.year}.txt`;
-                            document.body.appendChild(element);
-                            element.click();
-                            document.body.removeChild(element);
-                          }}
-                          className="bg-green-600 hover:bg-green-700 text-white px-3 py-1 rounded text-sm flex items-center"
-                        >
-                          <FaDownload className="ml-1" />
-                          تحميل
-                        </button>
-                      </div>
-                    </>
-                  )}
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
-      </div>
-    </div>
-  );
-}
-
-export default Dashboard;outline-none focus:ring-2 focus:ring-blue-500"
-                      placeholder="أدخل اسم القسم"
+                  <div className="mb-4">
+                    <label className="block text-gray-700 text-sm font-bold mb-2">
+                      وصف القسم
+                    </label>
+                    <textarea
+                      value={newCategory.description}
+                      onChange={(e) => setNewCategory({...newCategory, description: e.target.value})}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      rows="3"
+                      placeholder="أدخل وصف القسم"
                       required
                     />
                   </div>
@@ -902,7 +755,7 @@ export default Dashboard;outline-none focus:ring-2 focus:ring-blue-500"
                       type="button"
                       onClick={() => {
                         setIsAddingCategory(false);
-                        setNewCategoryName('');
+                        setNewCategory({ name: '', description: '' });
                       }}
                       className="bg-gray-600 hover:bg-gray-700 text-white px-4 py-2 rounded"
                     >
@@ -921,9 +774,16 @@ export default Dashboard;outline-none focus:ring-2 focus:ring-blue-500"
                     <form onSubmit={updateCategory}>
                       <input
                         type="text"
-                        value={updatedCategoryName}
-                        onChange={(e) => setUpdatedCategoryName(e.target.value)}
+                        value={updatedCategory.name}
+                        onChange={(e) => setUpdatedCategory({...updatedCategory, name: e.target.value})}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 mb-2"
+                        required
+                      />
+                      <textarea
+                        value={updatedCategory.description}
+                        onChange={(e) => setUpdatedCategory({...updatedCategory, description: e.target.value})}
                         className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 mb-4"
+                        rows="3"
                         required
                       />
                       <div className="flex gap-2">
@@ -938,7 +798,7 @@ export default Dashboard;outline-none focus:ring-2 focus:ring-blue-500"
                           type="button"
                           onClick={() => {
                             setEditingCategory(null);
-                            setUpdatedCategoryName('');
+                            setUpdatedCategory({ name: '', description: '' });
                           }}
                           className="bg-gray-600 hover:bg-gray-700 text-white px-3 py-1 rounded text-sm"
                         >
@@ -948,12 +808,16 @@ export default Dashboard;outline-none focus:ring-2 focus:ring-blue-500"
                     </form>
                   ) : (
                     <>
-                      <h3 className="text-xl font-bold text-gray-800 mb-4">{category.name}</h3>
+                      <h3 className="text-xl font-bold text-gray-800 mb-2">{category.name}</h3>
+                      <p className="text-gray-600 mb-4">{category.description}</p>
                       <div className="flex gap-2">
                         <button
                           onClick={() => {
                             setEditingCategory(category);
-                            setUpdatedCategoryName(category.name);
+                            setUpdatedCategory({
+                              name: category.name,
+                              description: category.description
+                            });
                           }}
                           className="bg-blue-600 hover:bg-blue-700 text-white px-3 py-1 rounded text-sm flex items-center"
                         >
@@ -1015,12 +879,11 @@ export default Dashboard;outline-none focus:ring-2 focus:ring-blue-500"
                         القسم
                       </label>
                       <select
-                        value={newService.category}
-                        onChange={(e) => setNewService({...newService, category: e.target.value})}
+                        value={newService.categoryId}
+                        onChange={(e) => setNewService({...newService, categoryId: e.target.value})}
                         className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                        required
                       >
-                        <option value="">اختر القسم</option>
+                        <option value="">اختر القسم (اختياري)</option>
                         {categories.map((category) => (
                           <option key={category._id} value={category._id}>
                             {category.name}
@@ -1039,6 +902,7 @@ export default Dashboard;outline-none focus:ring-2 focus:ring-blue-500"
                       className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
                       rows="3"
                       placeholder="أدخل وصف الخدمة"
+                      required
                     />
                   </div>
                   <div className="flex gap-2">
@@ -1053,7 +917,7 @@ export default Dashboard;outline-none focus:ring-2 focus:ring-blue-500"
                       type="button"
                       onClick={() => {
                         setIsAddingService(false);
-                        setNewService({ name: '', description: '', category: '' });
+                        setNewService({ name: '', description: '', categoryId: '' });
                       }}
                       className="bg-gray-600 hover:bg-gray-700 text-white px-4 py-2 rounded"
                     >
@@ -1079,12 +943,11 @@ export default Dashboard;outline-none focus:ring-2 focus:ring-blue-500"
                           required
                         />
                         <select
-                          value={updatedService.category}
-                          onChange={(e) => setUpdatedService({...updatedService, category: e.target.value})}
+                          value={updatedService.categoryId}
+                          onChange={(e) => setUpdatedService({...updatedService, categoryId: e.target.value})}
                           className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 mb-2"
-                          required
                         >
-                          <option value="">اختر القسم</option>
+                          <option value="">اختر القسم (اختياري)</option>
                           {categories.map((category) => (
                             <option key={category._id} value={category._id}>
                               {category.name}
@@ -1110,7 +973,7 @@ export default Dashboard;outline-none focus:ring-2 focus:ring-blue-500"
                           type="button"
                           onClick={() => {
                             setEditingService(null);
-                            setUpdatedService({ name: '', description: '', category: '' });
+                            setUpdatedService({ name: '', description: '', categoryId: '' });
                           }}
                           className="bg-gray-600 hover:bg-gray-700 text-white px-3 py-1 rounded text-sm"
                         >
@@ -1122,7 +985,10 @@ export default Dashboard;outline-none focus:ring-2 focus:ring-blue-500"
                     <>
                       <h3 className="text-xl font-bold text-gray-800 mb-2">{service.name}</h3>
                       <p className="text-gray-600 mb-2">
-                        القسم: {categories.find(cat => cat._id === service.category)?.name || 'غير محدد'}
+                        القسم: {service.categoryId ? 
+                          (categories.find(cat => cat._id === service.categoryId)?.name || 'غير محدد')
+                          : 'خدمات عامة'
+                        }
                       </p>
                       {service.description && (
                         <p className="text-gray-600 mb-4">{service.description}</p>
@@ -1134,7 +1000,7 @@ export default Dashboard;outline-none focus:ring-2 focus:ring-blue-500"
                             setUpdatedService({
                               name: service.name,
                               description: service.description || '',
-                              category: service.category
+                              categoryId: service.categoryId || ''
                             });
                           }}
                           className="bg-blue-600 hover:bg-blue-700 text-white px-3 py-1 rounded text-sm flex items-center"
@@ -1406,17 +1272,29 @@ export default Dashboard;outline-none focus:ring-2 focus:ring-blue-500"
                     </div>
                     <div>
                       <label className="block text-gray-700 text-sm font-bold mb-2">
-                        نوع الوسائط
+                        الفئة
                       </label>
                       <select
-                        value={newMedia.type}
-                        onChange={(e) => setNewMedia({...newMedia, type: e.target.value})}
+                        value={newMedia.category}
+                        onChange={(e) => setNewMedia({...newMedia, category: e.target.value})}
                         className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
                       >
-                        <option value="image">صورة</option>
-                        <option value="video">فيديو</option>
+                        <option value="general">عام</option>
+                        <option value="hero">الشريط الرئيسي</option>
                       </select>
                     </div>
+                  </div>
+                  <div className="mb-4">
+                    <label className="block text-gray-700 text-sm font-bold mb-2">
+                      وصف الوسائط
+                    </label>
+                    <textarea
+                      value={newMedia.description}
+                      onChange={(e) => setNewMedia({...newMedia, description: e.target.value})}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      rows="3"
+                      placeholder="أدخل وصف الوسائط"
+                    />
                   </div>
                   <div className="mb-4">
                     <label className="block text-gray-700 text-sm font-bold mb-2">
@@ -1426,7 +1304,7 @@ export default Dashboard;outline-none focus:ring-2 focus:ring-blue-500"
                       type="file"
                       onChange={(e) => setNewMedia({...newMedia, file: e.target.files[0]})}
                       className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                      accept={newMedia.type === 'image' ? 'image/*' : 'video/*'}
+                      accept="image/*,video/*"
                       required
                     />
                   </div>
@@ -1442,7 +1320,7 @@ export default Dashboard;outline-none focus:ring-2 focus:ring-blue-500"
                       type="button"
                       onClick={() => {
                         setIsAddingMedia(false);
-                        setNewMedia({ title: '', type: 'image', file: null });
+                        setNewMedia({ title: '', description: '', category: 'general', file: null });
                       }}
                       className="bg-gray-600 hover:bg-gray-700 text-white px-4 py-2 rounded"
                     >
@@ -1459,23 +1337,24 @@ export default Dashboard;outline-none focus:ring-2 focus:ring-blue-500"
                 <div key={media._id} className="bg-white p-6 rounded-lg shadow-md">
                   {media.type === 'image' && media.url && (
                     <img
-                      src={media.url}
+                      src={`${API_BASE}${media.url}`}
                       alt={media.title}
                       className="w-full h-48 object-cover rounded-lg mb-4"
                     />
                   )}
                   {media.type === 'video' && media.url && (
                     <video
-                      src={media.url}
+                      src={`${API_BASE}${media.url}`}
                       className="w-full h-48 object-cover rounded-lg mb-4"
                       controls
                     />
                   )}
                   <h3 className="text-xl font-bold text-gray-800 mb-2">{media.title}</h3>
-                  <p className="text-gray-600 mb-4">النوع: {media.type === 'image' ? 'صورة' : 'فيديو'}</p>
+                  <p className="text-gray-600 mb-2">النوع: {media.type === 'image' ? 'صورة' : 'فيديو'}</p>
+                  <p className="text-gray-600 mb-4">الفئة: {media.category === 'hero' ? 'الشريط الرئيسي' : 'عام'}</p>
                   <div className="flex gap-2">
                     <button
-                      onClick={() => window.open(media.url, '_blank')}
+                      onClick={() => window.open(`${API_BASE}${media.url}`, '_blank')}
                       className="bg-blue-600 hover:bg-blue-700 text-white px-3 py-1 rounded text-sm flex items-center"
                     >
                       <FaEye className="ml-1" />
@@ -1520,19 +1399,186 @@ export default Dashboard;outline-none focus:ring-2 focus:ring-blue-500"
                       السنة
                     </label>
                     <input
-                      type="text"
+                      type="number"
                       value={newReport.year}
-                      onChange={(e) => setNewReport({...newReport, year: e.target.value})}
+                      onChange={(e) => setNewReport({...newReport, year: parseInt(e.target.value)})}
                       className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
                       placeholder="مثال: 2024"
+                      min="2020"
+                      max="2030"
                       required
                     />
                   </div>
                   <div className="mb-4">
                     <label className="block text-gray-700 text-sm font-bold mb-2">
-                      محتوى التقرير
+                      الإحصائيات
                     </label>
-                    <textarea
-                      value={newReport.content}
-                      onChange={(e) => setNewReport({...newReport, content: e.target.value})}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:
+                    <div className="space-y-3">
+                      {['سنوات خبرة', 'أطباء خبراء', 'غرف مجهزة', 'عمليات منجزة', 'عدد المراجعين', 'عدد المراجعين الجدد'].map((label, index) => (
+                        <div key={index} className="flex gap-3 items-center">
+                          <span className="w-32 text-sm font-medium">{label}:</span>
+                          <input
+                            type="number"
+                            value={newReport.metrics.find(m => m.label === label)?.count || ''}
+                            onChange={(e) => {
+                              const updatedMetrics = [...newReport.metrics];
+                              const existingIndex = updatedMetrics.findIndex(m => m.label === label);
+                              if (existingIndex >= 0) {
+                                updatedMetrics[existingIndex].count = parseInt(e.target.value) || 0;
+                              } else {
+                                updatedMetrics.push({ label, count: parseInt(e.target.value) || 0, suffix: '' });
+                              }
+                              setNewReport({...newReport, metrics: updatedMetrics});
+                            }}
+                            className="flex-1 px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                            placeholder="0"
+                            min="0"
+                          />
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                  <div className="flex gap-2">
+                    <button
+                      type="submit"
+                      disabled={actionLoading}
+                      className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded disabled:opacity-50"
+                    >
+                      {actionLoading ? <FaSpinner className="animate-spin" /> : 'إضافة'}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setIsAddingReport(false);
+                        setNewReport({ year: new Date().getFullYear(), metrics: [] });
+                      }}
+                      className="bg-gray-600 hover:bg-gray-700 text-white px-4 py-2 rounded"
+                    >
+                      إلغاء
+                    </button>
+                  </div>
+                </form>
+              </div>
+            )}
+
+            {/* Reports Grid */}
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+              {reports.map((report) => (
+                <div key={report.year} className="bg-white p-6 rounded-lg shadow-md">
+                  {editingReport && editingReport.year === report.year ? (
+                    <form onSubmit={updateReport}>
+                      <div className="mb-4">
+                        <input
+                          type="number"
+                          value={updatedReport.year}
+                          onChange={(e) => setUpdatedReport({...updatedReport, year: parseInt(e.target.value)})}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 mb-2"
+                          required
+                        />
+                        <div className="space-y-2">
+                          {['سنوات خبرة', 'أطباء خبراء', 'غرف مجهزة', 'عمليات منجزة', 'عدد المراجعين', 'عدد المراجعين الجدد'].map((label, index) => (
+                            <div key={index} className="flex gap-2 items-center">
+                              <span className="text-xs w-20">{label}:</span>
+                              <input
+                                type="number"
+                                value={updatedReport.metrics.find(m => m.label === label)?.count || ''}
+                                onChange={(e) => {
+                                  const updatedMetrics = [...updatedReport.metrics];
+                                  const existingIndex = updatedMetrics.findIndex(m => m.label === label);
+                                  if (existingIndex >= 0) {
+                                    updatedMetrics[existingIndex].count = parseInt(e.target.value) || 0;
+                                  } else {
+                                    updatedMetrics.push({ label, count: parseInt(e.target.value) || 0, suffix: '' });
+                                  }
+                                  setUpdatedReport({...updatedReport, metrics: updatedMetrics});
+                                }}
+                                className="flex-1 px-2 py-1 border border-gray-300 rounded text-sm"
+                                min="0"
+                              />
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                      <div className="flex gap-2">
+                        <button
+                          type="submit"
+                          disabled={actionLoading}
+                          className="bg-green-600 hover:bg-green-700 text-white px-3 py-1 rounded text-sm disabled:opacity-50"
+                        >
+                          {actionLoading ? <FaSpinner className="animate-spin" /> : 'حفظ'}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setEditingReport(null);
+                            setUpdatedReport({ year: '', metrics: [] });
+                          }}
+                          className="bg-gray-600 hover:bg-gray-700 text-white px-3 py-1 rounded text-sm"
+                        >
+                          إلغاء
+                        </button>
+                      </div>
+                    </form>
+                  ) : (
+                    <>
+                      <h3 className="text-xl font-bold text-gray-800 mb-2">تقرير عام {report.year}</h3>
+                      <div className="space-y-2 mb-4">
+                        {report.metrics && report.metrics.map((metric, index) => (
+                          <div key={index} className="flex justify-between">
+                            <span className="text-gray-600 text-sm">{metric.label}:</span>
+                            <span className="font-semibold">{metric.count}{metric.suffix}</span>
+                          </div>
+                        ))}
+                      </div>
+                      <div className="flex gap-2">
+                        <button
+                          onClick={() => {
+                            setEditingReport(report);
+                            setUpdatedReport({
+                              year: report.year,
+                              metrics: report.metrics || []
+                            });
+                          }}
+                          className="bg-blue-600 hover:bg-blue-700 text-white px-3 py-1 rounded text-sm flex items-center"
+                        >
+                          <FaEdit className="ml-1" />
+                          تعديل
+                        </button>
+                        <button
+                          onClick={() => deleteReport(report.year)}
+                          disabled={actionLoading}
+                          className="bg-red-600 hover:bg-red-700 text-white px-3 py-1 rounded text-sm flex items-center disabled:opacity-50"
+                        >
+                          <FaTrash className="ml-1" />
+                          حذف
+                        </button>
+                        <button
+                          onClick={() => {
+                            const reportData = JSON.stringify(report, null, 2);
+                            const element = document.createElement('a');
+                            const file = new Blob([reportData], { type: 'application/json' });
+                            element.href = URL.createObjectURL(file);
+                            element.download = `تقرير_${report.year}.json`;
+                            document.body.appendChild(element);
+                            element.click();
+                            document.body.removeChild(element);
+                          }}
+                          className="bg-green-600 hover:bg-green-700 text-white px-3 py-1 rounded text-sm flex items-center"
+                        >
+                          <FaDownload className="ml-1" />
+                          تحميل
+                        </button>
+                      </div>
+                    </>
+                  )}
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+export default Dashboard;

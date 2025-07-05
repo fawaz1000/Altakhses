@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import axios from 'axios';
 import { Swiper, SwiperSlide } from 'swiper/react';
 import { Navigation, Pagination, Autoplay, EffectCoverflow } from 'swiper/modules';
-import { API_BASE } from '../../config';
+import { API_BASE, MEDIA_CATEGORY, MEDIA_SLIDE_INTERVAL } from '../../config';
 import { FaChevronRight, FaChevronLeft, FaTv, FaImage, FaExpand } from 'react-icons/fa';
 
 import 'swiper/css';
@@ -22,10 +22,22 @@ export default function MediaChannel() {
 
   useEffect(() => {
     const controller = new AbortController();
+    
+    console.log('🔍 Fetching media items from category:', MEDIA_CATEGORY);
+    
     axios
-      .get(`${API_BASE}/api/media?category=general`, { signal: controller.signal })
-      .then((res) => setItems(res.data || []))
-      .catch(() => setItems([]))
+      .get(`${API_BASE}/api/media?category=${MEDIA_CATEGORY}`, { signal: controller.signal })
+      .then((res) => {
+        const mediaItems = res.data || [];
+        console.log(`✅ Found ${mediaItems.length} media items`);
+        setItems(mediaItems);
+      })
+      .catch((error) => {
+        if (error.name !== 'CanceledError') {
+          console.error('❌ Error fetching media items:', error);
+        }
+        setItems([]);
+      })
       .finally(() => setLoading(false));
     return () => controller.abort();
   }, []);
@@ -150,13 +162,9 @@ export default function MediaChannel() {
           spaceBetween={30}
           loop={items.length > 3}
           autoplay={{
-            delay: 6000,
+            delay: MEDIA_SLIDE_INTERVAL,
             disableOnInteraction: false,
             pauseOnMouseEnter: true,
-          }}
-          navigation={{
-            nextEl: '.media-button-next',
-            prevEl: '.media-button-prev',
           }}
           pagination={{
             el: '.media-pagination',
@@ -165,6 +173,10 @@ export default function MediaChannel() {
             renderBullet: (index, className) => {
               return `<span class="${className}"></span>`;
             },
+          }}
+          navigation={{
+            nextEl: '.media-button-next',
+            prevEl: '.media-button-prev',
           }}
           className="media-swiper"
         >

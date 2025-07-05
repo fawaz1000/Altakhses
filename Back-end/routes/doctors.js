@@ -1,10 +1,26 @@
-// Back-end/routes/doctors.js
+// Back-end/routes/doctors.js - مُصحح ومُحسن
 const express = require('express');
 const router = express.Router();
 const Doctor = require('../Models/Doctors');
 const Category = require('../Models/Category');
 const authenticateToken = require('../Middleware/authMiddleware');
-const { requireAdmin } = require('../Middleware/roleMiddleware');
+const { requireAdmin } = require('../Middleware/authMiddleware');
+
+// إضافة middleware للـ CORS والـ logging
+router.use((req, res, next) => {
+  res.header('Access-Control-Allow-Origin', process.env.CORS_ORIGIN || 'http://localhost:3000');
+  res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
+  res.header('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, Authorization');
+  res.header('Access-Control-Allow-Credentials', 'true');
+  
+  console.log(`[${new Date().toISOString()}] ${req.method} ${req.originalUrl}`);
+  next();
+});
+
+// معالجة طلبات OPTIONS
+router.options('*', (req, res) => {
+  res.status(200).end();
+});
 
 // جلب جميع الأطباء (عام)
 router.get('/', async (req, res) => {
@@ -12,7 +28,7 @@ router.get('/', async (req, res) => {
     console.log('Fetching all doctors...');
     
     const doctors = await Doctor.find({ isActive: true })
-      .populate('specialty', 'name')
+      .populate('specialty', 'name icon slug')
       .sort({ createdAt: -1 });
     
     console.log('Doctors found:', doctors.length);
@@ -53,7 +69,7 @@ router.get('/specialty/:specialtyId', async (req, res) => {
       specialty: specialtyId, 
       isActive: true 
     })
-    .populate('specialty', 'name')
+    .populate('specialty', 'name icon slug')
     .sort({ createdAt: -1 });
     
     console.log('Doctors found for specialty:', doctors.length);
@@ -75,6 +91,60 @@ router.get('/specialty/:specialtyId', async (req, res) => {
   }
 });
 
+// جلب أطباء حسب slug التخصص (عام)
+router.get('/category/:categorySlug', async (req, res) => {
+  try {
+    const { categorySlug } = req.params;
+    
+    console.log('Fetching doctors for category slug:', categorySlug);
+    
+    // البحث عن التخصص بالـ slug
+    const specialty = await Category.findOne({ 
+      $or: [
+        { slug: categorySlug },
+        { name: { $regex: new RegExp(categorySlug, 'i') } }
+      ]
+    });
+    
+    if (!specialty) {
+      return res.status(404).json({
+        success: false,
+        message: 'التخصص غير موجود'
+      });
+    }
+    
+    const doctors = await Doctor.find({ 
+      specialty: specialty._id, 
+      isActive: true 
+    })
+    .populate('specialty', 'name icon slug')
+    .sort({ createdAt: -1 });
+    
+    console.log('Doctors found for category:', doctors.length);
+    
+    res.status(200).json({
+      success: true,
+      data: doctors,
+      specialty: {
+        _id: specialty._id,
+        name: specialty.name,
+        icon: specialty.icon,
+        slug: specialty.slug,
+        description: specialty.description
+      },
+      count: doctors.length
+    });
+    
+  } catch (error) {
+    console.error('Error fetching doctors by category:', error);
+    res.status(500).json({
+      success: false,
+      message: 'خطأ في جلب أطباء التخصص',
+      error: error.message
+    });
+  }
+});
+
 // جلب طبيب واحد (عام)
 router.get('/:id', async (req, res) => {
   try {
@@ -83,7 +153,7 @@ router.get('/:id', async (req, res) => {
     console.log('Fetching doctor:', id);
     
     const doctor = await Doctor.findById(id)
-      .populate('specialty', 'name');
+      .populate('specialty', 'name icon slug');
     
     if (!doctor) {
       return res.status(404).json({
@@ -133,7 +203,7 @@ router.post('/', authenticateToken, requireAdmin, async (req, res) => {
     
     // التحقق من عدم وجود طبيب بنفس الاسم والتخصص
     const existingDoctor = await Doctor.findOne({ 
-      name: { $regex: new RegExp('^' + name.trim() + '$', 'i') },
+      name: { $regex: new RegExp('^' + name.trim() + ', 'i') },
       specialty: specialty
     });
     
@@ -156,7 +226,7 @@ router.post('/', authenticateToken, requireAdmin, async (req, res) => {
     
     // جلب الطبيب مع بيانات التخصص
     const populatedDoctor = await Doctor.findById(savedDoctor._id)
-      .populate('specialty', 'name');
+      .populate('specialty', 'name icon slug');
     
     console.log('Doctor created successfully:', populatedDoctor._id);
     
@@ -224,7 +294,7 @@ router.put('/:id', authenticateToken, requireAdmin, async (req, res) => {
     const existingDoctor = await Doctor.findOne({ 
       $and: [
         { _id: { $ne: id } },
-        { name: { $regex: new RegExp('^' + name.trim() + '$', 'i') } },
+        { name: { $regex: new RegExp('^' + name.trim() + ', 'i') } },
         { specialty: specialty }
       ]
     });
@@ -246,7 +316,7 @@ router.put('/:id', authenticateToken, requireAdmin, async (req, res) => {
         image: image ? image.trim() : ''
       },
       { new: true, runValidators: true }
-    ).populate('specialty', 'name');
+    ).populate('specialty', 'name icon slug');
     
     console.log('Doctor updated successfully:', updatedDoctor._id);
     
@@ -331,7 +401,7 @@ router.patch('/:id/toggle-status', authenticateToken, requireAdmin, async (req, 
     await doctor.save();
     
     const populatedDoctor = await Doctor.findById(id)
-      .populate('specialty', 'name');
+      .populate('specialty', 'name icon slug');
     
     console.log('Doctor status toggled successfully:', id);
     
@@ -382,6 +452,7 @@ router.get('/admin/stats', authenticateToken, requireAdmin, async (req, res) => 
       {
         $project: {
           specialtyName: '$specialty.name',
+          specialtyIcon: '$specialty.icon',
           count: 1
         }
       },

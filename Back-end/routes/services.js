@@ -55,7 +55,7 @@ router.get('/', async (req, res) => {
       }
     }
     
-    let servicesQuery = Service.find(query).sort({ createdAt: -1 });
+    let servicesQuery = Service.find(query).sort({ order: 1, createdAt: -1 });
     
     // populate معلومات القسم إذا طُلب ذلك
     if (populate === 'category' || populate === 'true') {
@@ -73,9 +73,9 @@ router.get('/', async (req, res) => {
   } catch (error) {
     console.error('Error fetching services:', error);
     res.status(500).json({ 
-      error: 'خطأ في جلب الخدمات',
-      message: error.message,
-      success: false
+      success: false,
+      message: 'خطأ في جلب الخدمات',
+      error: error.message
     });
   }
 });
@@ -91,8 +91,8 @@ router.get('/:id', async (req, res) => {
     
     if (!service) {
       return res.status(404).json({ 
-        error: 'الخدمة غير موجودة',
-        success: false
+        success: false,
+        message: 'الخدمة غير موجودة'
       });
     }
     
@@ -106,15 +106,15 @@ router.get('/:id', async (req, res) => {
     
     if (error.name === 'CastError') {
       return res.status(400).json({ 
-        error: 'معرف الخدمة غير صحيح',
-        success: false
+        success: false,
+        message: 'معرف الخدمة غير صحيح'
       });
     }
     
     res.status(500).json({ 
-      error: 'خطأ في جلب الخدمة',
-      message: error.message,
-      success: false
+      success: false,
+      message: 'خطأ في جلب الخدمة',
+      error: error.message
     });
   }
 });
@@ -125,24 +125,24 @@ router.post('/', authenticateToken, requireAdmin, async (req, res) => {
     console.log('POST /api/services - Creating new service');
     console.log('Request body:', JSON.stringify(req.body, null, 2));
     
-    const { name, title, description, categoryId, price, duration } = req.body;
+    const { name, title, description, categoryId, price, duration, features, requirements } = req.body;
     
     // التحقق من البيانات المطلوبة
     if (!name || !name.trim()) {
       console.log('❌ Missing name field');
       return res.status(400).json({ 
-        error: 'اسم الخدمة مطلوب',
-        message: 'يجب إدخال اسم صحيح للخدمة',
-        success: false
+        success: false,
+        message: 'اسم الخدمة مطلوب',
+        error: 'يجب إدخال اسم صحيح للخدمة'
       });
     }
 
     if (!description || !description.trim()) {
       console.log('❌ Missing description field');
       return res.status(400).json({ 
-        error: 'وصف الخدمة مطلوب',
-        message: 'يجب إدخال وصف للخدمة',
-        success: false
+        success: false,
+        message: 'وصف الخدمة مطلوب',
+        error: 'يجب إدخال وصف للخدمة'
       });
     }
     
@@ -163,6 +163,7 @@ router.post('/', authenticateToken, requireAdmin, async (req, res) => {
         console.log('Creating general category...');
         generalCategory = new Category({
           name: 'خدمات عامة',
+          title: 'خدمات عامة',
           description: 'خدمات طبية عامة ومتنوعة',
           icon: 'FaStethoscope',
           order: 999,
@@ -179,9 +180,9 @@ router.post('/', authenticateToken, requireAdmin, async (req, res) => {
       if (!category) {
         console.log('❌ Category not found:', finalCategoryId);
         return res.status(400).json({ 
-          error: 'القسم المحدد غير موجود',
-          message: 'يرجى اختيار قسم صحيح',
-          success: false
+          success: false,
+          message: 'القسم المحدد غير موجود',
+          error: 'يرجى اختيار قسم صحيح'
         });
       }
       console.log('✅ Category found:', category.name);
@@ -197,8 +198,8 @@ router.post('/', authenticateToken, requireAdmin, async (req, res) => {
     if (existingService) {
       console.log('❌ Service already exists:', existingService.name);
       return res.status(400).json({ 
-        error: 'يوجد خدمة بهذا الاسم في نفس القسم مسبقاً',
-        success: false
+        success: false,
+        message: 'يوجد خدمة بهذا الاسم في نفس القسم مسبقاً'
       });
     }
 
@@ -210,6 +211,8 @@ router.post('/', authenticateToken, requireAdmin, async (req, res) => {
       categoryId: finalCategoryId,
       price: price ? parseFloat(price) : undefined,
       duration: duration && duration.trim() ? duration.trim() : undefined,
+      features: features ? (Array.isArray(features) ? features : [features]) : [],
+      requirements: requirements && requirements.trim() ? requirements.trim() : undefined,
       isActive: true,
       metadata: {
         createdBy: req.user && req.user.id ? req.user.id : req.user.username
@@ -229,8 +232,8 @@ router.post('/', authenticateToken, requireAdmin, async (req, res) => {
     
     res.status(201).json({
       success: true,
-      data: populatedService,
-      message: 'تم إنشاء الخدمة بنجاح'
+      message: 'تم إنشاء الخدمة بنجاح',
+      data: populatedService
     });
     
   } catch (error) {
@@ -238,24 +241,24 @@ router.post('/', authenticateToken, requireAdmin, async (req, res) => {
     
     if (error.code === 11000) {
       return res.status(400).json({ 
-        error: 'اسم الخدمة موجود مسبقاً في هذا القسم',
-        success: false
+        success: false,
+        message: 'اسم الخدمة موجود مسبقاً في هذا القسم'
       });
     }
     
     if (error.name === 'ValidationError') {
       const validationErrors = Object.values(error.errors).map(err => err.message);
       return res.status(400).json({ 
-        error: 'خطأ في التحقق من البيانات',
-        message: validationErrors.join(', '),
-        success: false
+        success: false,
+        message: 'خطأ في التحقق من البيانات',
+        error: validationErrors.join(', ')
       });
     }
     
     res.status(500).json({ 
-      error: 'خطأ في إنشاء الخدمة',
-      message: error.message,
-      success: false
+      success: false,
+      message: 'خطأ في إنشاء الخدمة',
+      error: error.message
     });
   }
 });
@@ -266,20 +269,20 @@ router.put('/:id', authenticateToken, requireAdmin, async (req, res) => {
     console.log('PUT /api/services/' + req.params.id);
     console.log('Request body:', req.body);
     
-    const { name, title, description, categoryId, price, duration } = req.body;
+    const { name, title, description, categoryId, price, duration, features, requirements } = req.body;
     
     // التحقق من البيانات المطلوبة
     if (!name || !name.trim()) {
       return res.status(400).json({ 
-        error: 'اسم الخدمة مطلوب',
-        success: false
+        success: false,
+        message: 'اسم الخدمة مطلوب'
       });
     }
 
     if (!description || !description.trim()) {
       return res.status(400).json({ 
-        error: 'وصف الخدمة مطلوب',
-        success: false
+        success: false,
+        message: 'وصف الخدمة مطلوب'
       });
     }
     
@@ -288,8 +291,8 @@ router.put('/:id', authenticateToken, requireAdmin, async (req, res) => {
       const category = await Category.findById(categoryId);
       if (!category) {
         return res.status(400).json({ 
-          error: 'القسم المحدد غير موجود',
-          success: false
+          success: false,
+          message: 'القسم المحدد غير موجود'
         });
       }
     }
@@ -305,8 +308,8 @@ router.put('/:id', authenticateToken, requireAdmin, async (req, res) => {
     
     if (existingService && categoryId) {
       return res.status(400).json({ 
-        error: 'يوجد خدمة أخرى بهذا الاسم في نفس القسم',
-        success: false
+        success: false,
+        message: 'يوجد خدمة أخرى بهذا الاسم في نفس القسم'
       });
     }
     
@@ -316,6 +319,8 @@ router.put('/:id', authenticateToken, requireAdmin, async (req, res) => {
       description: description.trim(),
       price: price ? parseFloat(price) : undefined,
       duration: duration && duration.trim() ? duration.trim() : undefined,
+      features: features ? (Array.isArray(features) ? features : [features]) : [],
+      requirements: requirements && requirements.trim() ? requirements.trim() : undefined,
       updatedAt: new Date(),
       'metadata.updatedBy': req.user && req.user.id ? req.user.id : req.user.username
     };
@@ -343,8 +348,8 @@ router.put('/:id', authenticateToken, requireAdmin, async (req, res) => {
 
     if (!service) {
       return res.status(404).json({ 
-        error: 'الخدمة غير موجودة',
-        success: false
+        success: false,
+        message: 'الخدمة غير موجودة'
       });
     }
 
@@ -352,8 +357,8 @@ router.put('/:id', authenticateToken, requireAdmin, async (req, res) => {
     
     res.json({
       success: true,
-      data: service,
-      message: 'تم تحديث الخدمة بنجاح'
+      message: 'تم تحديث الخدمة بنجاح',
+      data: service
     });
     
   } catch (error) {
@@ -361,31 +366,31 @@ router.put('/:id', authenticateToken, requireAdmin, async (req, res) => {
     
     if (error.name === 'CastError') {
       return res.status(400).json({ 
-        error: 'معرف الخدمة غير صحيح',
-        success: false
+        success: false,
+        message: 'معرف الخدمة غير صحيح'
       });
     }
     
     if (error.code === 11000) {
       return res.status(400).json({ 
-        error: 'اسم الخدمة موجود مسبقاً في هذا القسم',
-        success: false
+        success: false,
+        message: 'اسم الخدمة موجود مسبقاً في هذا القسم'
       });
     }
     
     if (error.name === 'ValidationError') {
       const validationErrors = Object.values(error.errors).map(err => err.message);
       return res.status(400).json({ 
-        error: 'خطأ في التحقق من البيانات',
-        message: validationErrors.join(', '),
-        success: false
+        success: false,
+        message: 'خطأ في التحقق من البيانات',
+        error: validationErrors.join(', ')
       });
     }
     
     res.status(500).json({ 
-      error: 'خطأ في تحديث الخدمة',
-      message: error.message,
-      success: false
+      success: false,
+      message: 'خطأ في تحديث الخدمة',
+      error: error.message
     });
   }
 });
@@ -399,8 +404,8 @@ router.delete('/:id', authenticateToken, requireAdmin, async (req, res) => {
     
     if (!service) {
       return res.status(404).json({ 
-        error: 'الخدمة غير موجودة',
-        success: false
+        success: false,
+        message: 'الخدمة غير موجودة'
       });
     }
 
@@ -416,15 +421,15 @@ router.delete('/:id', authenticateToken, requireAdmin, async (req, res) => {
     
     if (error.name === 'CastError') {
       return res.status(400).json({ 
-        error: 'معرف الخدمة غير صحيح',
-        success: false
+        success: false,
+        message: 'معرف الخدمة غير صحيح'
       });
     }
     
     res.status(500).json({ 
-      error: 'خطأ في حذف الخدمة',
-      message: error.message,
-      success: false
+      success: false,
+      message: 'خطأ في حذف الخدمة',
+      error: error.message
     });
   }
 });
@@ -478,9 +483,9 @@ router.get('/stats/by-category', async (req, res) => {
   } catch (error) {
     console.error('Error getting services stats:', error);
     res.status(500).json({ 
-      error: 'خطأ في جلب إحصائيات الخدمات',
-      message: error.message,
-      success: false
+      success: false,
+      message: 'خطأ في جلب إحصائيات الخدمات',
+      error: error.message
     });
   }
 });
@@ -509,9 +514,9 @@ router.get('/search/:query', async (req, res) => {
   } catch (error) {
     console.error('Error searching services:', error);
     res.status(500).json({ 
-      error: 'خطأ في البحث',
-      message: error.message,
-      success: false
+      success: false,
+      message: 'خطأ في البحث',
+      error: error.message
     });
   }
 });

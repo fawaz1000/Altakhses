@@ -1,4 +1,4 @@
-// src/App.jsx - Clean version without missing imports
+// src/App.jsx - Fixed version with proper routing
 import React from 'react';
 import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
 
@@ -13,6 +13,9 @@ import PartnersSlider from './Components/PartnersSlider/PartnersSlider';
 
 // صفحة عامة للخدمات
 import ServicesByCategory from './Components/Services/ServicesByCategory';
+
+// صفحة الأطباء حسب التخصص
+import DoctorsBySpecialty from './Components/Doctors/DoctorsBySpecialty';
 
 // صفحات الإدارة
 import AdminLogin from './Pages/AdminLogin';
@@ -47,6 +50,20 @@ export default function App() {
             
             {/* صفحة جميع الأقسام */}
             <Route path="/services" element={<Services />} />
+
+            {/* صفحة الأطباء حسب التخصص */}
+            <Route path="/doctors/:categorySlug" element={<DoctorsBySpecialty />} />
+            
+            {/* صفحة جميع الأطباء */}
+            <Route path="/doctors" element={<Doctors />} />
+
+            {/* مسارات مخصصة للتخصصات الشائعة */}
+            <Route path="/dentist" element={<DoctorsBySpecialty />} />
+            <Route path="/internist" element={<DoctorsBySpecialty />} />
+            <Route path="/pediatrics" element={<DoctorsBySpecialty />} />
+            <Route path="/orthopedics" element={<DoctorsBySpecialty />} />
+            <Route path="/ophthalmology" element={<DoctorsBySpecialty />} />
+            <Route path="/gynecology" element={<DoctorsBySpecialty />} />
 
             {/* صفحات الإدارة */}
             <Route path="/admin/login" element={<AdminLogin />} />

@@ -1,7 +1,7 @@
 import React, { useEffect, useState, useRef, useCallback } from 'react';
 import axios from 'axios';
 import { FaChevronRight, FaChevronLeft, FaPlay, FaPause } from 'react-icons/fa';
-import { API_BASE, SLIDE_CATEGORY, SLIDE_INTERVAL } from '../../config';
+import { API_BASE, HERO_CATEGORY, HERO_SLIDE_INTERVAL } from '../../config';
 
 const getSrc = (url) => {
   if (!url) return '';
@@ -88,17 +88,23 @@ export default function Hero() {
 
   useEffect(() => {
     let isMounted = true;
+    
+    console.log('🔍 Fetching hero slides from category:', HERO_CATEGORY);
+    
     axios
       .get(`${API_BASE}/api/media`, {
-        params: { category: SLIDE_CATEGORY },
+        params: { category: HERO_CATEGORY },
       })
       .then((res) => {
         if (isMounted) {
-          setSlides(res.data || []);
+          const heroSlides = res.data || [];
+          console.log(`✅ Found ${heroSlides.length} hero slides`);
+          setSlides(heroSlides);
         }
       })
-      .catch(() => {
+      .catch((error) => {
         if (isMounted) {
+          console.error('❌ Error fetching hero slides:', error);
           setSlides([]);
         }
       });
@@ -112,7 +118,7 @@ export default function Hero() {
     clearInterval(timer.current);
     timer.current = setInterval(() => {
       setIdx((i) => (i + 1) % (slides.length || 1));
-    }, SLIDE_INTERVAL);
+    }, HERO_SLIDE_INTERVAL);
   }, [slides, isPlaying]);
 
   useEffect(() => {
@@ -159,8 +165,31 @@ export default function Hero() {
             <div className="absolute inset-0 w-24 h-24 mx-auto border-4 border-[#48D690]/30 rounded-3xl animate-ping"></div>
           </div>
           
-          <div className="w-16 h-16 border-4 border-[#48D690] border-t-transparent rounded-full animate-spin mx-auto mb-6"></div>
-          <p className="text-white text-xl font-light">جارٍ التحميل...</p>
+          <h1 className="text-4xl md:text-6xl font-black text-white mb-4">
+            <span className="bg-gradient-to-r from-[#48D690] to-[#28a49c] bg-clip-text text-transparent">
+              مجموعة التخصيص الطبية
+            </span>
+          </h1>
+          <p className="text-xl text-white/80 mb-8 max-w-2xl mx-auto">
+            الرائدون في الخدمات الطبية المتخصصة بأحدث التقنيات العالمية
+          </p>
+          
+          <div className="flex flex-col sm:flex-row gap-4 justify-center">
+            <a
+              href="https://wa.me/966500069636"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="bg-gradient-to-r from-[#48D690] to-[#28a49c] text-white font-bold px-8 py-4 rounded-2xl hover:shadow-xl transition-all duration-300 hover:scale-105"
+            >
+              احجز موعد الآن
+            </a>
+            <a
+              href="tel:920002111"
+              className="bg-white/10 backdrop-blur-md text-white font-bold px-8 py-4 rounded-2xl hover:bg-white/20 transition-all duration-300 border border-white/20"
+            >
+              اتصل بنا
+            </a>
+          </div>
         </div>
       </div>
     );
@@ -184,7 +213,7 @@ export default function Hero() {
           className="h-full bg-gradient-to-r from-[#48D690] to-[#28a49c] transition-all duration-300"
           style={{ 
             width: `${((idx + 1) / slides.length) * 100}%`,
-            animation: isPlaying ? 'progress 5s linear infinite' : 'none'
+            animation: isPlaying ? `progress ${HERO_SLIDE_INTERVAL}ms linear infinite` : 'none'
           }}
         />
       </div>

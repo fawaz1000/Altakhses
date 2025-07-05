@@ -1,4 +1,4 @@
-// src/Components/Services/services.js - Updated with API integration
+// src/Components/Services/services.js - Updated with API integration and proper navigation
 import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
@@ -14,7 +14,8 @@ import {
   FaSpinner,
   FaExclamationTriangle,
   FaHeart,
-  FaArrowLeft
+  FaArrowLeft,
+  FaUserMd
 } from 'react-icons/fa';
 import { GiBrokenBone } from 'react-icons/gi';
 import { MdEmergency, MdPregnantWoman } from 'react-icons/md';
@@ -61,20 +62,20 @@ export default function Services() {
       
       console.log('✅ Categories response:', response.data);
       
-      if (Array.isArray(response.data) && response.data.length > 0) {
+      if (response.data.success && Array.isArray(response.data.data) && response.data.data.length > 0) {
+        setCategories(response.data.data);
+        console.log(`✅ ${response.data.data.length} categories loaded successfully`);
+      } else if (Array.isArray(response.data) && response.data.length > 0) {
         setCategories(response.data);
         console.log(`✅ ${response.data.length} categories loaded successfully`);
       } else {
         console.log('ℹ️ No categories found, using fallback data');
-        // بيانات احتياطية في حالة عدم وجود أقسام في قاعدة البيانات
         setCategories(getFallbackCategories());
       }
       
     } catch (error) {
       console.error('❌ Error fetching categories:', error);
       setError('حدث خطأ في تحميل الأقسام');
-      
-      // استخدام بيانات احتياطية في حالة الخطأ
       setCategories(getFallbackCategories());
     } finally {
       setLoading(false);
@@ -171,22 +172,18 @@ export default function Services() {
     return <FaStethoscope className={iconClass} />;
   }, []);
 
-  // دالة للتنقل إلى صفحة الخدمات
-  const handleCategoryClick = (category) => {
-    console.log('🔄 Navigating to category:', category.name, category.slug);
+  // دالة للتنقل إلى صفحة الخدمات أو الأطباء
+  const handleCategoryClick = (category, type = 'services') => {
+    console.log('🔄 Navigating to category:', category.name, category.slug, 'type:', type);
     
-    // التنقل إلى صفحة الخدمات الخاصة بالقسم
-    if (category.slug === 'dentist' || category.name.includes('أسنان')) {
-      navigate('/dentist');
-    } else if (category.slug === 'internal-medicine' || category.name.includes('باطني')) {
-      navigate('/internist');
-    } else if (category.slug === 'general' || category.name.includes('عام')) {
-      navigate('/general');
-    } else if (category.slug === 'ent' || category.name.includes('أنف') || category.name.includes('حنجرة')) {
-      navigate('/ent');
+    const slug = category.slug || category._id;
+    
+    if (type === 'doctors') {
+      // التنقل إلى صفحة الأطباء
+      navigate(`/doctors/${slug}`);
     } else {
-      // للأقسام الجديدة، استخدم صفحة عامة للخدمات
-      navigate(`/services/${category.slug || category._id}`);
+      // التنقل إلى صفحة الخدمات
+      navigate(`/services/${slug}`);
     }
   };
 
@@ -292,7 +289,6 @@ export default function Services() {
                 isVisible ? 'animate-fade-in-up' : 'opacity-0'
               }`}
               style={{ animationDelay: `${index * 150}ms` }}
-              onClick={() => handleCategoryClick(category)}
             >
               {/* تأثير الإضاءة */}
               <div className="absolute inset-0 bg-gradient-to-br from-[#0d5047]/5 to-[#28a49c]/5 opacity-0 group-hover:opacity-100 transition-opacity duration-500"></div>
@@ -324,12 +320,25 @@ export default function Services() {
                   {category.description}
                 </p>
 
-                {/* زر الاستكشاف */}
-                <div className="mt-auto">
-                  <div className="inline-flex items-center gap-2 bg-gradient-to-r from-[#0d5047] to-[#28a49c] text-white font-bold px-6 py-3 rounded-2xl group-hover:shadow-xl transition-all duration-300 group-hover:scale-105">
+                {/* أزرار الإجراءات */}
+                <div className="mt-auto space-y-3">
+                  {/* زر الخدمات */}
+                  <button
+                    onClick={() => handleCategoryClick(category, 'services')}
+                    className="w-full inline-flex items-center justify-center gap-2 bg-gradient-to-r from-[#0d5047] to-[#28a49c] text-white font-bold px-6 py-3 rounded-2xl group-hover:shadow-xl transition-all duration-300 hover:scale-105"
+                  >
                     <span>استكشف الخدمات</span>
                     <FaArrowLeft className="w-4 h-4 group-hover:translate-x-1 transition-transform duration-300" />
-                  </div>
+                  </button>
+                  
+                  {/* زر الأطباء */}
+                  <button
+                    onClick={() => handleCategoryClick(category, 'doctors')}
+                    className="w-full inline-flex items-center justify-center gap-2 bg-white border-2 border-[#0d5047] text-[#0d5047] font-bold px-6 py-3 rounded-2xl hover:bg-[#0d5047] hover:text-white transition-all duration-300 hover:scale-105"
+                  >
+                    <FaUserMd className="w-4 h-4" />
+                    <span>الأطباء</span>
+                  </button>
                 </div>
 
                 {/* شريط ديكوري */}
