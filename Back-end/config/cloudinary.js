@@ -298,43 +298,49 @@ const uploadMedia = multer({
 });
 
 // دالة لحذف الصور من Cloudinary
-const deleteFromCloudinary = async (imageUrl) => {
+const deleteFromCloudinary = async (imageUrlOrPublicId) => {
   try {
-    if (!imageUrl || !imageUrl.includes('cloudinary')) {
-      console.log('⚠️ No valid Cloudinary URL provided for deletion');
+    if (!imageUrlOrPublicId) {
+      console.log('⚠️ No URL or public_id provided for deletion');
       return { result: 'not_found' };
     }
 
-    console.log('🗑️ Attempting to delete from Cloudinary:', imageUrl);
+    let publicId = imageUrlOrPublicId;
 
-    // استخراج public_id من الـ URL
-    const urlParts = imageUrl.split('/');
-    const uploadIndex = urlParts.indexOf('upload');
-    
-    if (uploadIndex !== -1) {
-      // إزالة version (v123456) إذا كان موجود
-      let startIndex = uploadIndex + 1;
-      if (urlParts[startIndex] && urlParts[startIndex].startsWith('v') && !isNaN(urlParts[startIndex].substring(1))) {
-        startIndex += 1;
+    // إذا كان URL وليس public_id، استخراج public_id من الـ URL
+    if (imageUrlOrPublicId.includes('cloudinary') || imageUrlOrPublicId.startsWith('http')) {
+      console.log('🗑️ Attempting to delete from Cloudinary URL:', imageUrlOrPublicId);
+      
+      const urlParts = imageUrlOrPublicId.split('/');
+      const uploadIndex = urlParts.indexOf('upload');
+      
+      if (uploadIndex !== -1) {
+        // إزالة version (v123456) إذا كان موجود
+        let startIndex = uploadIndex + 1;
+        if (urlParts[startIndex] && urlParts[startIndex].startsWith('v') && !isNaN(urlParts[startIndex].substring(1))) {
+          startIndex += 1;
+        }
+        
+        // بناء public_id
+        const publicIdParts = urlParts.slice(startIndex);
+        const lastPart = publicIdParts[publicIdParts.length - 1];
+        const publicIdWithoutExtension = lastPart.split('.')[0];
+        publicIdParts[publicIdParts.length - 1] = publicIdWithoutExtension;
+        publicId = publicIdParts.join('/');
+      } else {
+        console.log('⚠️ Could not extract public_id from URL');
+        return { result: 'not_found' };
       }
-      
-      // بناء public_id
-      const publicIdParts = urlParts.slice(startIndex);
-      const lastPart = publicIdParts[publicIdParts.length - 1];
-      const publicIdWithoutExtension = lastPart.split('.')[0];
-      publicIdParts[publicIdParts.length - 1] = publicIdWithoutExtension;
-      const publicId = publicIdParts.join('/');
-      
-      console.log('🔍 Extracted public_id:', publicId);
-      
-      const result = await cloudinary.uploader.destroy(publicId);
-      console.log('✅ Cloudinary deletion result:', result);
-      
-      return result;
+    } else {
+      console.log('🗑️ Attempting to delete from Cloudinary using public_id:', publicId);
     }
     
-    console.log('⚠️ Could not extract public_id from URL');
-    return { result: 'not_found' };
+    console.log('🔍 Using public_id:', publicId);
+    
+    const result = await cloudinary.uploader.destroy(publicId);
+    console.log('✅ Cloudinary deletion result:', result);
+    
+    return result;
     
   } catch (error) {
     console.error('❌ Error deleting from Cloudinary:', error);
