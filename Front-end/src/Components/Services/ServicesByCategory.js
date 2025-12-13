@@ -12,6 +12,17 @@ import {
 } from 'react-icons/fa';
 import { API_BASE } from '../../config';
 
+// دالة مساعدة للحصول على URL الصورة الصحيح
+const getImageUrl = (imagePath) => {
+  if (!imagePath) return "";
+  // إذا كانت الصورة من Cloudinary أو أي مصدر خارجي
+  if (imagePath.startsWith("http://") || imagePath.startsWith("https://")) {
+    return imagePath;
+  }
+  // إذا كانت الصورة محلية
+  return `${API_BASE}${imagePath.startsWith("/") ? "" : "/"}${imagePath}`;
+};
+
 export default function ServicesByCategory() {
   const { categorySlug } = useParams();
   const navigate = useNavigate();
@@ -224,7 +235,7 @@ export default function ServicesByCategory() {
                       <div className="absolute inset-0 bg-gradient-to-br from-white/10 to-transparent"></div>
                       {category?.image ? (
                         <img
-                          src={category.image}
+                          src={getImageUrl(category.image)}
                           alt={category.name}
                           className="w-full h-full object-cover relative z-10"
                           onError={(e) => {
@@ -323,7 +334,7 @@ export default function ServicesByCategory() {
                               <div className="w-12 h-12 bg-gradient-to-br from-[#28a49c] to-[#062b2d] rounded-xl flex items-center justify-center shadow-lg group-hover:scale-110 transition-transform duration-300 overflow-hidden">
                                 {category?.image ? (
                                   <img
-                                    src={category.image}
+                                    src={getImageUrl(category.image)}
                                     alt={category.name}
                                     className="w-full h-full object-cover"
                                     onError={(e) => {

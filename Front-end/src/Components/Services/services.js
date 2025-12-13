@@ -4,6 +4,17 @@ import axios from 'axios';
 import { API_BASE } from '../../config';
 import { FaStethoscope, FaHeartbeat, FaHospital } from 'react-icons/fa';
 
+// دالة مساعدة للحصول على URL الصورة الصحيح
+const getImageUrl = (imagePath) => {
+  if (!imagePath) return "";
+  // إذا كانت الصورة من Cloudinary أو أي مصدر خارجي
+  if (imagePath.startsWith("http://") || imagePath.startsWith("https://")) {
+    return imagePath;
+  }
+  // إذا كانت الصورة محلية
+  return `${API_BASE}${imagePath.startsWith("/") ? "" : "/"}${imagePath}`;
+};
+
 export default function Services() {
   const navigate = useNavigate();
   const [categoriesWithServices, setCategoriesWithServices] = useState([]);
@@ -228,7 +239,7 @@ export default function Services() {
                     <div className="flex items-center justify-center w-20 h-20 mx-auto mb-6 bg-gradient-to-br from-[#0d5047] to-[#28a49c] rounded-3xl shadow-xl transition-all duration-500 group-hover:scale-110 group-hover:rotate-12 overflow-hidden">
                       {category.image ? (
                         <img
-                          src={category.image}
+                          src={getImageUrl(category.image)}
                           alt={category.name}
                           className="w-full h-full object-cover"
                           onError={(e) => {
