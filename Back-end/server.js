@@ -45,14 +45,14 @@ const corsOptions = {
       process.env.CORS_ORIGIN || 'http://localhost:3000',
       'http://localhost:3000',
       'http://127.0.0.1:3000',
-      'https://comfy-pudding-96d3db.netlify.app',
-      'https://comfy-pudding-96d3db.netlify.app',
-      'https://comfy-pudding-96d3db.netlify.app',
-      'https://comfy-pudding-96d3db.netlify.app',
-      'https://comfy-pudding-96d3db.netlify.app',
-      'https://comfy-pudding-96d3db.netlify.app',
-      'https://comfy-pudding-96d3db.netlify.app',
-      'https://comfy-pudding-96d3db.netlify.app'
+      'https://altakhses1.netlify.app',
+      'https://altakhses.netlify.app',
+      'https://altakhsees1.netlify.app',
+      'https://altakhsees.netlify.app',
+      'https://www.altakhsees1.netlify.app',
+      'https://www.altakhsees.netlify.app',
+      'https://www.altakhses1.netlify.app',
+      'https://www.altakhses.netlify.app'
     ];
     
     if (!origin || allowedOrigins.includes(origin)) {
