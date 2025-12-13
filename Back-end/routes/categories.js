@@ -197,8 +197,8 @@ router.post('/', authenticateToken, (req, res) => {
       // التحقق من البيانات المطلوبة
       if (!name || !name.trim()) {
         // حذف الصورة المرفوعة إذا كان هناك خطأ
-        if (req.file) {
-          await deleteFromCloudinary(req.file.path);
+        if (req.file && req.file.public_id) {
+          await deleteFromCloudinary(req.file.public_id);
         }
         return res.status(400).json({ 
           error: 'اسم القسم مطلوب',
@@ -207,8 +207,8 @@ router.post('/', authenticateToken, (req, res) => {
       }
       
       if (!description || !description.trim()) {
-        if (req.file) {
-          await deleteFromCloudinary(req.file.path);
+        if (req.file && req.file.public_id) {
+          await deleteFromCloudinary(req.file.public_id);
         }
         return res.status(400).json({ 
           error: 'وصف القسم مطلوب',
@@ -226,8 +226,8 @@ router.post('/', authenticateToken, (req, res) => {
       });
       
       if (existingCategory) {
-        if (req.file) {
-          await deleteFromCloudinary(req.file.path);
+        if (req.file && req.file.public_id) {
+          await deleteFromCloudinary(req.file.public_id);
         }
         return res.status(400).json({ 
           error: 'يوجد قسم بهذا الاسم مسبقاً',
@@ -235,12 +235,15 @@ router.post('/', authenticateToken, (req, res) => {
         });
       }
 
+      // 🆕 CloudinaryStorage يعيد secure_url أو url وليس path
+      const fileUrl = req.file ? (req.file.secure_url || req.file.url) : null;
+
       // إنشاء بيانات القسم
       const categoryData = {
         name: name.trim(),
         title: (title || name).trim(),
         description: description.trim(),
-        image: req.file ? req.file.path : null
+        image: fileUrl
       };
 
       console.log('Creating category with data:', categoryData);
@@ -271,9 +274,9 @@ router.post('/', authenticateToken, (req, res) => {
       console.error('❌ Error creating category:', error);
       
       // حذف الصورة المرفوعة في حالة الخطأ
-      if (req.file) {
+      if (req.file && req.file.public_id) {
         try {
-          await deleteFromCloudinary(req.file.path);
+          await deleteFromCloudinary(req.file.public_id);
         } catch (deleteError) {
           console.error('Error deleting uploaded file:', deleteError);
         }
@@ -335,8 +338,8 @@ router.put('/:id', authenticateToken, (req, res) => {
       
       // التحقق من البيانات المطلوبة
       if (!name || !name.trim()) {
-        if (req.file) {
-          await deleteFromCloudinary(req.file.path);
+        if (req.file && req.file.public_id) {
+          await deleteFromCloudinary(req.file.public_id);
         }
         return res.status(400).json({ 
           error: 'اسم القسم مطلوب',
@@ -345,8 +348,8 @@ router.put('/:id', authenticateToken, (req, res) => {
       }
       
       if (!description || !description.trim()) {
-        if (req.file) {
-          await deleteFromCloudinary(req.file.path);
+        if (req.file && req.file.public_id) {
+          await deleteFromCloudinary(req.file.public_id);
         }
         return res.status(400).json({ 
           error: 'وصف القسم مطلوب',
@@ -357,8 +360,8 @@ router.put('/:id', authenticateToken, (req, res) => {
       // العثور على القسم الحالي
       const currentCategory = await Category.findById(req.params.id);
       if (!currentCategory) {
-        if (req.file) {
-          await deleteFromCloudinary(req.file.path);
+        if (req.file && req.file.public_id) {
+          await deleteFromCloudinary(req.file.public_id);
         }
         return res.status(404).json({ 
           error: 'القسم غير موجود',
@@ -381,8 +384,8 @@ router.put('/:id', authenticateToken, (req, res) => {
       });
       
       if (existingCategory) {
-        if (req.file) {
-          await deleteFromCloudinary(req.file.path);
+        if (req.file && req.file.public_id) {
+          await deleteFromCloudinary(req.file.public_id);
         }
         return res.status(400).json({ 
           error: 'يوجد قسم آخر بهذا الاسم',
@@ -401,13 +404,24 @@ router.put('/:id', authenticateToken, (req, res) => {
         }
         imagePath = null;
       } else if (req.file) {
+        // 🆕 CloudinaryStorage يعيد secure_url أو url وليس path
+        const fileUrl = req.file.secure_url || req.file.url;
+        
+        if (!fileUrl) {
+          console.error('❌ No URL returned from Cloudinary:', req.file);
+          return res.status(500).json({
+            error: 'فشل في رفع الملف إلى Cloudinary',
+            message: 'لم يتم إرجاع رابط الملف من Cloudinary'
+          });
+        }
+        
         // رفع صورة جديدة - حذف القديمة أولاً
         if (currentCategory.image) {
           await deleteFromCloudinary(currentCategory.image);
           console.log('🗑️ Deleted old category image');
         }
-        imagePath = req.file.path;
-        console.log('📷 Uploaded new category image');
+        imagePath = fileUrl;
+        console.log('📷 Uploaded new category image:', fileUrl);
       }
       
       // تحديث البيانات
@@ -452,9 +466,9 @@ router.put('/:id', authenticateToken, (req, res) => {
       console.error('❌ Error updating category:', error);
       
       // حذف الصورة الجديدة في حالة الخطأ
-      if (req.file) {
+      if (req.file && req.file.public_id) {
         try {
-          await deleteFromCloudinary(req.file.path);
+          await deleteFromCloudinary(req.file.public_id);
         } catch (deleteError) {
           console.error('Error deleting uploaded file:', deleteError);
         }

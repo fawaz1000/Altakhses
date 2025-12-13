@@ -133,11 +133,21 @@ router.post('/logo', authenticateToken, uploadLogo.single('logo'), async (req, r
       console.log('🗑️ Deleted old logo');
     }
     
-    // حفظ الشعار الجديد
-    settings.logo = req.file.path;
+    // حفظ الشعار الجديد - CloudinaryStorage يعيد secure_url أو url وليس path
+    const fileUrl = req.file.secure_url || req.file.url;
+    
+    if (!fileUrl) {
+      console.error('❌ No URL returned from Cloudinary:', req.file);
+      return res.status(500).json({
+        success: false,
+        message: 'فشل في رفع الملف إلى Cloudinary'
+      });
+    }
+    
+    settings.logo = fileUrl;
     await settings.save();
     
-    console.log('✅ Logo uploaded successfully');
+    console.log('✅ Logo uploaded successfully:', fileUrl);
     
     res.status(200).json({
       success: true,
@@ -148,8 +158,12 @@ router.post('/logo', authenticateToken, uploadLogo.single('logo'), async (req, r
     console.error('❌ Error uploading logo:', error);
     
     // حذف الملف المرفوع في حالة الخطأ
-    if (req.file) {
-      await deleteFromCloudinary(req.file.path);
+    if (req.file && req.file.public_id) {
+      try {
+        await deleteFromCloudinary(req.file.public_id);
+      } catch (deleteError) {
+        console.error('❌ Error deleting from Cloudinary:', deleteError);
+      }
     }
     
     res.status(500).json({

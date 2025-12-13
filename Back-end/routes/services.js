@@ -97,8 +97,8 @@ router.post('/', authenticateToken, requireAdmin, (req, res) => {
       // التحقق من البيانات المطلوبة
       if (!name || !description || !categoryId) {
         // حذف الصورة المرفوعة إذا كان هناك خطأ
-        if (req.file) {
-          await deleteFromCloudinary(req.file.path);
+        if (req.file && req.file.public_id) {
+          await deleteFromCloudinary(req.file.public_id);
         }
         return res.status(400).json({ 
           error: 'اسم الخدمة ووصفها والقسم مطلوبة' 
@@ -108,8 +108,8 @@ router.post('/', authenticateToken, requireAdmin, (req, res) => {
       // التحقق من وجود القسم
       const category = await Category.findById(categoryId);
       if (!category) {
-        if (req.file) {
-          await deleteFromCloudinary(req.file.path);
+        if (req.file && req.file.public_id) {
+          await deleteFromCloudinary(req.file.public_id);
         }
         return res.status(400).json({ error: 'القسم المحدد غير موجود' });
       }
@@ -122,19 +122,22 @@ router.post('/', authenticateToken, requireAdmin, (req, res) => {
       });
       
       if (existingService) {
-        if (req.file) {
-          await deleteFromCloudinary(req.file.path);
+        if (req.file && req.file.public_id) {
+          await deleteFromCloudinary(req.file.public_id);
         }
         return res.status(400).json({ 
           error: 'يوجد خدمة بهذا الاسم في نفس القسم مسبقاً' 
         });
       }
 
+      // 🆕 CloudinaryStorage يعيد secure_url أو url وليس path
+      const fileUrl = req.file ? (req.file.secure_url || req.file.url) : null;
+
       const service = new Service({
         name,
         description,
         categoryId,
-        image: req.file ? req.file.path : null, // 🆕 إضافة مسار الصورة
+        image: fileUrl, // 🆕 إضافة رابط الصورة من Cloudinary
         price: price ? parseFloat(price) : undefined,
         duration
       });
@@ -151,9 +154,9 @@ router.post('/', authenticateToken, requireAdmin, (req, res) => {
       console.error('Error creating service:', error);
       
       // حذف الصورة المرفوعة في حالة الخطأ
-      if (req.file) {
+      if (req.file && req.file.public_id) {
         try {
-          await deleteFromCloudinary(req.file.path);
+          await deleteFromCloudinary(req.file.public_id);
         } catch (deleteError) {
           console.error('Error deleting uploaded file:', deleteError);
         }
@@ -184,8 +187,8 @@ router.put('/:id', authenticateToken, requireAdmin, (req, res) => {
       // العثور على الخدمة الحالية
       const currentService = await Service.findById(req.params.id);
       if (!currentService) {
-        if (req.file) {
-          await deleteFromCloudinary(req.file.path);
+        if (req.file && req.file.public_id) {
+          await deleteFromCloudinary(req.file.public_id);
         }
         return res.status(404).json({ error: 'الخدمة غير موجودة' });
       }
@@ -194,8 +197,8 @@ router.put('/:id', authenticateToken, requireAdmin, (req, res) => {
       if (categoryId) {
         const category = await Category.findById(categoryId);
         if (!category) {
-          if (req.file) {
-            await deleteFromCloudinary(req.file.path);
+          if (req.file && req.file.public_id) {
+            await deleteFromCloudinary(req.file.public_id);
           }
           return res.status(400).json({ error: 'القسم المحدد غير موجود' });
         }
@@ -212,13 +215,24 @@ router.put('/:id', authenticateToken, requireAdmin, (req, res) => {
         }
         imagePath = null;
       } else if (req.file) {
+        // 🆕 CloudinaryStorage يعيد secure_url أو url وليس path
+        const fileUrl = req.file.secure_url || req.file.url;
+        
+        if (!fileUrl) {
+          console.error('❌ No URL returned from Cloudinary:', req.file);
+          return res.status(500).json({
+            error: 'فشل في رفع الملف إلى Cloudinary',
+            message: 'لم يتم إرجاع رابط الملف من Cloudinary'
+          });
+        }
+        
         // رفع صورة جديدة - حذف القديمة أولاً
         if (currentService.image) {
           await deleteFromCloudinary(currentService.image);
           console.log('🗑️ Deleted old service image');
         }
-        imagePath = req.file.path;
-        console.log('📷 Uploaded new service image');
+        imagePath = fileUrl;
+        console.log('📷 Uploaded new service image:', fileUrl);
       }
       
       const updateData = {
@@ -253,9 +267,9 @@ router.put('/:id', authenticateToken, requireAdmin, (req, res) => {
       console.error('Error updating service:', error);
       
       // حذف الصورة الجديدة في حالة الخطأ
-      if (req.file) {
+      if (req.file && req.file.public_id) {
         try {
-          await deleteFromCloudinary(req.file.path);
+          await deleteFromCloudinary(req.file.public_id);
         } catch (deleteError) {
           console.error('Error deleting uploaded file:', deleteError);
         }

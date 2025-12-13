@@ -294,10 +294,18 @@ router.post('/', authenticateToken, requireAdmin, uploadDoctor.single('image'), 
       });
     }
     
-    // 🆕 الصورة من Cloudinary
+    // 🆕 الصورة من Cloudinary - CloudinaryStorage يعيد secure_url أو url وليس path
     let imagePath = null;
     if (req.file) {
-      imagePath = req.file.path;
+      imagePath = req.file.secure_url || req.file.url;
+      
+      if (!imagePath) {
+        console.error('❌ No URL returned from Cloudinary:', req.file);
+        return res.status(500).json({
+          success: false,
+          message: 'فشل في رفع الملف إلى Cloudinary'
+        });
+      }
     }
     
     const newDoctor = new Doctor({
@@ -329,8 +337,12 @@ router.post('/', authenticateToken, requireAdmin, uploadDoctor.single('image'), 
     console.error('❌ Error creating doctor:', error);
     
     // 🆕 حذف الصورة من Cloudinary إذا حدث خطأ
-    if (req.file) {
-      await deleteFromCloudinary(req.file.path);
+    if (req.file && req.file.public_id) {
+      try {
+        await deleteFromCloudinary(req.file.public_id);
+      } catch (deleteError) {
+        console.error('❌ Error deleting from Cloudinary:', deleteError);
+      }
     }
     
     if (error.name === 'ValidationError') {
@@ -415,11 +427,23 @@ router.put('/:id', authenticateToken, requireAdmin, uploadDoctor.single('image')
       }
       imagePath = null;
     } else if (req.file) {
+      // 🆕 CloudinaryStorage يعيد secure_url أو url وليس path
+      const fileUrl = req.file.secure_url || req.file.url;
+      
+      if (!fileUrl) {
+        console.error('❌ No URL returned from Cloudinary:', req.file);
+        return res.status(500).json({
+          success: false,
+          message: 'فشل في رفع الملف إلى Cloudinary'
+        });
+      }
+      
       // رفع صورة جديدة - حذف القديمة أولاً
       if (doctor.image) {
         await deleteFromCloudinary(doctor.image);
       }
-      imagePath = req.file.path;
+      imagePath = fileUrl;
+      console.log('📷 Uploaded new doctor image:', fileUrl);
     }
     
     const updatedDoctor = await Doctor.findByIdAndUpdate(
@@ -450,8 +474,12 @@ router.put('/:id', authenticateToken, requireAdmin, uploadDoctor.single('image')
     console.error('❌ Error updating doctor:', error);
     
     // 🆕 حذف الصورة الجديدة من Cloudinary إذا حدث خطأ
-    if (req.file) {
-      await deleteFromCloudinary(req.file.path);
+    if (req.file && req.file.public_id) {
+      try {
+        await deleteFromCloudinary(req.file.public_id);
+      } catch (deleteError) {
+        console.error('❌ Error deleting from Cloudinary:', deleteError);
+      }
     }
     
     if (error.name === 'CastError') {

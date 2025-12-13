@@ -41,8 +41,8 @@ router.post('/', authenticateToken, (req, res) => {
       const { name, enName } = req.body;
 
       if (!name || !name.trim()) {
-        if (req.file) {
-          await deleteFromCloudinary(req.file.path);
+        if (req.file && req.file.public_id) {
+          await deleteFromCloudinary(req.file.public_id);
         }
         return res.status(400).json({ success: false, message: 'اسم الشريك مطلوب' });
       }
@@ -51,12 +51,23 @@ router.post('/', authenticateToken, (req, res) => {
         return res.status(400).json({ success: false, message: 'الشعار مطلوب' });
       }
 
-      console.log('✅ Logo uploaded to Cloudinary:', req.file.path);
+      // 🆕 CloudinaryStorage يعيد secure_url أو url وليس path
+      const fileUrl = req.file.secure_url || req.file.url;
+      
+      if (!fileUrl) {
+        console.error('❌ No URL returned from Cloudinary:', req.file);
+        return res.status(500).json({
+          success: false,
+          message: 'فشل في رفع الملف إلى Cloudinary'
+        });
+      }
+
+      console.log('✅ Logo uploaded to Cloudinary:', fileUrl);
 
       const newPartner = new Partner({
         name: name.trim(),
         enName: enName ? enName.trim() : '',
-        logo: req.file.path,
+        logo: fileUrl,
         isActive: true
       });
 
@@ -66,8 +77,12 @@ router.post('/', authenticateToken, (req, res) => {
       res.status(201).json({ success: true, data: saved, message: 'تم إضافة الشريك بنجاح' });
     } catch (error) {
       console.error('خطأ حفظ الشريك:', error);
-      if (req.file) {
-        await deleteFromCloudinary(req.file.path);
+      if (req.file && req.file.public_id) {
+        try {
+          await deleteFromCloudinary(req.file.public_id);
+        } catch (deleteError) {
+          console.error('❌ Error deleting from Cloudinary:', deleteError);
+        }
       }
       res.status(500).json({ success: false, message: 'فشل في حفظ الشريك' });
     }
@@ -86,8 +101,8 @@ router.put('/:id', authenticateToken, (req, res) => {
       const { name, enName } = req.body;
 
       if (!name || !name.trim()) {
-        if (req.file) {
-          await deleteFromCloudinary(req.file.path);
+        if (req.file && req.file.public_id) {
+          await deleteFromCloudinary(req.file.public_id);
         }
         return res.status(400).json({ success: false, message: 'اسم الشريك مطلوب' });
       }
@@ -99,11 +114,23 @@ router.put('/:id', authenticateToken, (req, res) => {
 
       // إذا تم رفع شعار جديد
       if (req.file) {
+        // 🆕 CloudinaryStorage يعيد secure_url أو url وليس path
+        const fileUrl = req.file.secure_url || req.file.url;
+        
+        if (!fileUrl) {
+          console.error('❌ No URL returned from Cloudinary:', req.file);
+          return res.status(500).json({
+            success: false,
+            message: 'فشل في رفع الملف إلى Cloudinary'
+          });
+        }
+        
         const oldPartner = await Partner.findById(req.params.id);
         if (oldPartner && oldPartner.logo) {
           await deleteFromCloudinary(oldPartner.logo);
         }
-        updateData.logo = req.file.path;
+        updateData.logo = fileUrl;
+        console.log('📷 Uploaded new partner logo:', fileUrl);
       }
 
       const updated = await Partner.findByIdAndUpdate(
@@ -113,8 +140,8 @@ router.put('/:id', authenticateToken, (req, res) => {
       );
 
       if (!updated) {
-        if (req.file) {
-          await deleteFromCloudinary(req.file.path);
+        if (req.file && req.file.public_id) {
+          await deleteFromCloudinary(req.file.public_id);
         }
         return res.status(404).json({ success: false, message: 'الشريك غير موجود' });
       }
@@ -122,8 +149,12 @@ router.put('/:id', authenticateToken, (req, res) => {
       res.json({ success: true, data: updated, message: 'تم تحديث الشريك بنجاح' });
     } catch (err) {
       console.error('خطأ تحديث الشريك:', err);
-      if (req.file) {
-        await deleteFromCloudinary(req.file.path);
+      if (req.file && req.file.public_id) {
+        try {
+          await deleteFromCloudinary(req.file.public_id);
+        } catch (deleteError) {
+          console.error('❌ Error deleting from Cloudinary:', deleteError);
+        }
       }
       res.status(400).json({ success: false, message: 'فشل تحديث الشريك' });
     }
