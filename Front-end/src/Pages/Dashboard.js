@@ -772,7 +772,13 @@ export default function Dashboard() {
         );
       }
     } catch (error) {
-      showMessage("error", "فشل في رفع الشعار");
+      console.error("خطأ في رفع الشعار:", error);
+      const errorMessage =
+        error.response?.data?.message ||
+        error.response?.data?.error ||
+        error.message ||
+        "فشل في رفع الشعار";
+      showMessage("error", errorMessage);
     } finally {
       setIsSubmitting(false);
     }
@@ -963,7 +969,13 @@ export default function Dashboard() {
       });
       showMessage("success", "تم إضافة الخدمة بنجاح");
     } catch (error) {
-      showMessage("error", "فشل في إضافة الخدمة");
+      console.error("خطأ في إضافة الخدمة:", error);
+      const errorMessage =
+        error.response?.data?.error ||
+        error.response?.data?.message ||
+        error.message ||
+        "فشل في إضافة الخدمة";
+      showMessage("error", errorMessage);
     } finally {
       setIsSubmitting(false);
     }
@@ -1016,7 +1028,13 @@ export default function Dashboard() {
       setEditingServiceId(null);
       showMessage("success", "تم تحديث الخدمة بنجاح");
     } catch (error) {
-      showMessage("error", "فشل في تحديث الخدمة");
+      console.error("خطأ في تحديث الخدمة:", error);
+      const errorMessage =
+        error.response?.data?.error ||
+        error.response?.data?.message ||
+        error.message ||
+        "فشل في تحديث الخدمة";
+      showMessage("error", errorMessage);
     }
   };
 
@@ -1032,7 +1050,13 @@ export default function Dashboard() {
       setServices(services.filter((s) => s._id !== id));
       showMessage("success", "تم حذف الخدمة بنجاح");
     } catch (error) {
-      showMessage("error", "فشل في حذف الخدمة");
+      console.error("خطأ في حذف الخدمة:", error);
+      const errorMessage =
+        error.response?.data?.error ||
+        error.response?.data?.message ||
+        error.message ||
+        "فشل في حذف الخدمة";
+      showMessage("error", errorMessage);
     }
   };
 
@@ -1156,8 +1180,12 @@ export default function Dashboard() {
       setEditingDoctorId(null);
       showMessage("success", "تم تحديث بيانات الطبيب بنجاح");
     } catch (error) {
+      console.error("خطأ في تحديث بيانات الطبيب:", error);
       const errorMessage =
-        error.response?.data?.message || "فشل في تحديث بيانات الطبيب";
+        error.response?.data?.message ||
+        error.response?.data?.error ||
+        error.message ||
+        "فشل في تحديث بيانات الطبيب";
       showMessage("error", errorMessage);
     }
   };

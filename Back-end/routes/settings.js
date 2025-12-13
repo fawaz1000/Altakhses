@@ -133,14 +133,26 @@ router.post('/logo', authenticateToken, uploadLogo.single('logo'), async (req, r
       console.log('🗑️ Deleted old logo');
     }
     
-    // حفظ الشعار الجديد - CloudinaryStorage يعيد secure_url أو url وليس path
-    const fileUrl = req.file.secure_url || req.file.url;
+    // 🔍 multer-storage-cloudinary v4 يعيد path كـ URL كامل
+    // لكن بعض الإصدارات قد تعيد secure_url أو url
+    // نتحقق من جميع الخيارات
+    const fileUrl = req.file.path || req.file.secure_url || req.file.url;
     
     if (!fileUrl) {
-      console.error('❌ No URL returned from Cloudinary:', req.file);
+      console.error('❌ No URL returned from Cloudinary');
+      console.error('❌ req.file keys:', Object.keys(req.file));
+      console.error('❌ req.file object:', {
+        path: req.file.path,
+        secure_url: req.file.secure_url,
+        url: req.file.url,
+        public_id: req.file.public_id,
+        originalname: req.file.originalname,
+        mimetype: req.file.mimetype
+      });
       return res.status(500).json({
         success: false,
-        message: 'فشل في رفع الملف إلى Cloudinary'
+        message: 'فشل في رفع الملف إلى Cloudinary - لم يتم إرجاع رابط الملف',
+        error: 'Cloudinary did not return a file URL'
       });
     }
     
